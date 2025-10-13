@@ -215,12 +215,22 @@ def analyze_competitors(self, job_id: str, left_transcript_path: str, right_tran
             left_response = client.get(f"{settings.STORAGE_URL}/download/{left_transcript_path}")
             left_response.raise_for_status()
             left_result = left_response.json()
-            left_transcript = left_result.get('data', {})
+            # Handle nested data structure: data.data.data
+            left_data = left_result.get('data', {})
+            if isinstance(left_data, dict) and 'data' in left_data:
+                left_transcript = left_data.get('data', {})
+            else:
+                left_transcript = left_data
 
             right_response = client.get(f"{settings.STORAGE_URL}/download/{right_transcript_path}")
             right_response.raise_for_status()
             right_result = right_response.json()
-            right_transcript = right_result.get('data', {})
+            # Handle nested data structure: data.data.data
+            right_data = right_result.get('data', {})
+            if isinstance(right_data, dict) and 'data' in right_data:
+                right_transcript = right_data.get('data', {})
+            else:
+                right_transcript = right_data
 
             # Combine transcript texts
             combined_text = left_transcript.get('text', '') + ' ' + right_transcript.get('text', '')
@@ -290,12 +300,22 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
             left_response = client.get(f"{settings.STORAGE_URL}/download/{left_transcript_path}")
             left_response.raise_for_status()
             left_result = left_response.json()
-            left_transcript = left_result.get('data', {})
+            # Handle nested data structure: data.data.data
+            left_data = left_result.get('data', {})
+            if isinstance(left_data, dict) and 'data' in left_data:
+                left_transcript = left_data.get('data', {})
+            else:
+                left_transcript = left_data
 
             right_response = client.get(f"{settings.STORAGE_URL}/download/{right_transcript_path}")
             right_response.raise_for_status()
             right_result = right_response.json()
-            right_transcript = right_result.get('data', {})
+            # Handle nested data structure: data.data.data
+            right_data = right_result.get('data', {})
+            if isinstance(right_data, dict) and 'data' in right_data:
+                right_transcript = right_data.get('data', {})
+            else:
+                right_transcript = right_data
 
             # Combine transcript texts
             combined_transcript = {
