@@ -12,7 +12,7 @@ RUN npm install
 COPY . .
 
 # Build the application
-RUN npm run build
+RUN npm run build && ls -la build/ && echo "Build successful"
 
 # Create a non-root user (use existing group if GID 1000 exists, or create new group)
 RUN addgroup -g 1001 appuser || addgroup appuser
