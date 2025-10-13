@@ -1,0 +1,266 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: audio-postgres
+    environment:
+      POSTGRES_USER: audiouser
+      POSTGRES_PASSWORD: audiopass
+      POSTGRES_DB: audiodb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - audio-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U audiouser -d audiodb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: audio-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - audio-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: audio-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - audio-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  orchestrator-api:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: audio-orchestrator-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DATABASE_URL: postgresql://audiouser:audiopass@postgres:5432/audiodb
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: audio-transcripts
+      MINIO_SECURE: "false"
+      API_KEY: your-secure-api-key-change-in-production
+      AUTH_URL: ${AUTH_URL}
+      AUTH_USERNAME: ${AUTH_USERNAME}
+      AUTH_PASSWORD: ${AUTH_PASSWORD}
+      SPLIT_URL: ${SPLIT_URL}
+      TRANSCRIPTION_URL: ${TRANSCRIPTION_URL}
+      SENTIMENT_URL: ${SENTIMENT_URL}
+      ANALYSIS_URL: http://analysis-api:8001
+      STORAGE_URL: http://storage-api:8002
+      NOTIFICATION_URL: http://notification-api:8003
+      FRONTEND_URL: http://frontend:3000
+    ports:
+      - "8100:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      storage-api:
+        condition: service_healthy
+      analysis-api:
+        condition: service_healthy
+      notification-api:
+        condition: service_healthy
+    networks:
+      - audio-network
+    volumes:
+      - ./orchestrator:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  worker:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: audio-worker
+    command: celery -A app.celery_app worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://audiouser:audiopass@postgres:5432/audiodb
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: audio-transcripts
+      MINIO_SECURE: "false"
+      API_KEY: your-secure-api-key-change-in-production
+      AUTH_URL: ${AUTH_URL}
+      AUTH_USERNAME: ${AUTH_USERNAME}
+      AUTH_PASSWORD: ${AUTH_PASSWORD}
+      SPLIT_URL: ${SPLIT_URL}
+      TRANSCRIPTION_URL: ${TRANSCRIPTION_URL}
+      SENTIMENT_URL: ${SENTIMENT_URL}
+      ANALYSIS_URL: http://analysis-api:8001
+      STORAGE_URL: http://storage-api:8002
+      NOTIFICATION_URL: http://notification-api:8003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      storage-api:
+        condition: service_healthy
+      notification-api:
+        condition: service_healthy
+      orchestrator-api:
+        condition: service_healthy
+    networks:
+      - audio-network
+    volumes:
+      - ./orchestrator:/app
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  analysis-api:
+    build:
+      context: ./analysis_service
+      dockerfile: Dockerfile
+    container_name: audio-analysis-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    networks:
+      - audio-network
+    volumes:
+      - ./analysis_service:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  storage-api:
+    build:
+      context: ./storage_service
+      dockerfile: Dockerfile
+    container_name: audio-storage-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: audio-transcripts
+      MINIO_SECURE: "false"
+    ports:
+      - "8002:8002"
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - audio-network
+    volumes:
+      - ./storage_service:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  notification-api:
+    build:
+      context: ./notification_service
+      dockerfile: Dockerfile
+    container_name: audio-notification-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8003
+    environment:
+      ENABLE_EMAIL: ${ENABLE_EMAIL:-true}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Audio Processing System}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      NOTIFICATION_EMAILS: ${NOTIFICATION_EMAILS}
+      ENABLE_WEBHOOK: ${ENABLE_WEBHOOK:-false}
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      ENABLE_SLACK: ${ENABLE_SLACK:-false}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+      NOTIFY_ON_JOB_FAILURE: ${NOTIFY_ON_JOB_FAILURE:-true}
+      NOTIFY_ON_JOB_SUCCESS: ${NOTIFY_ON_JOB_SUCCESS:-false}
+      NOTIFY_ON_TASK_FAILURE: ${NOTIFY_ON_TASK_FAILURE:-true}
+      NOTIFY_ON_SYSTEM_ERROR: ${NOTIFY_ON_SYSTEM_ERROR:-true}
+      NOTIFICATION_MAX_RETRIES: ${NOTIFICATION_MAX_RETRIES:-3}
+      NOTIFICATION_RETRY_DELAY: ${NOTIFICATION_RETRY_DELAY:-5}
+    ports:
+      - "8003:8003"
+    networks:
+      - audio-network
+    volumes:
+      - ./notification_service:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: audio-frontend
+    environment:
+      PUBLIC_API_URL: http://localhost:8100
+      ORIGIN: http://localhost:3200
+    ports:
+      - "3200:3000"
+    depends_on:
+      - orchestrator-api
+    networks:
+      - audio-network
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+networks:
+  audio-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  minio_data:
