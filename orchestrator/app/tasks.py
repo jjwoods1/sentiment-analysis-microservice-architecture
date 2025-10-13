@@ -317,8 +317,15 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
             else:
                 right_transcript = right_data
 
-            # Combine transcript texts
+            # Combine transcript texts and format with metadata for sentiment service
             combined_transcript = {
+                "metadata": {
+                    "ref-id": str(job_id),
+                    "used-model": left_transcript.get('model', 'large-v3'),
+                    "transcribed-at": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+                    "company-code": "AUTO",
+                    "agent-name": "System"
+                },
                 "text": left_transcript.get('text', '') + ' ' + right_transcript.get('text', ''),
                 "segments": left_transcript.get('segments', []) + right_transcript.get('segments', [])
             }
