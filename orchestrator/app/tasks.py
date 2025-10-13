@@ -342,18 +342,28 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
                 transcript_file_path = transcript_file.name
 
             # Call sentiment analysis service
+            sentiment_url = f"{settings.SENTIMENT_URL}/analyze/contextual/file"
+            print(f"[DEBUG] Sending sentiment analysis request to: {sentiment_url}")
+            print(f"[DEBUG] Competitor: {competitor_name}")
+            print(f"[DEBUG] Transcript metadata: {combined_transcript.get('metadata', {})}")
+            print(f"[DEBUG] Transcript text length: {len(combined_transcript.get('text', ''))}")
+            print(f"[DEBUG] Transcript segments count: {len(combined_transcript.get('segments', []))}")
+
             with open(context_file_path, 'rb') as ctx_file, open(transcript_file_path, 'rb') as trans_file:
                 files = {
                     'context': ('context.txt', ctx_file, 'text/plain'),
                     'transcript': ('transcript.json', trans_file, 'application/json')
                 }
 
-                sentiment_response = client.post(
-                    f"{settings.SENTIMENT_URL}/analyze/contextual/file",
-                    files=files
-                )
+                sentiment_response = client.post(sentiment_url, files=files)
+
+                print(f"[DEBUG] Sentiment API response status: {sentiment_response.status_code}")
+                print(f"[DEBUG] Sentiment API response headers: {dict(sentiment_response.headers)}")
+
                 sentiment_response.raise_for_status()
                 result = sentiment_response.json()
+
+                print(f"[DEBUG] Sentiment API response: {json.dumps(result, indent=2)[:500]}")
 
                 # Handle array response format (empty array returns no results)
                 if isinstance(result, list):
