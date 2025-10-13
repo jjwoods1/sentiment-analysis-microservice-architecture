@@ -277,7 +277,7 @@ def analyze_competitors(self, job_id: str, left_transcript_path: str, right_tran
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
-def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, left_transcript_path: str, right_transcript_path: str):
+def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, left_transcript_path: str, right_transcript_path: str, filename: str = "unknown"):
     """
     Analyze sentiment for a specific competitor with retry logic.
 
@@ -288,6 +288,7 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
         competitor_name: Name of the competitor to analyze
         left_transcript_path: Storage path to left channel transcript
         right_transcript_path: Storage path to right channel transcript
+        filename: Original audio filename
 
     Returns:
         Sentiment analysis result
@@ -324,7 +325,8 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
                     "used-model": left_transcript.get('model', 'large-v3'),
                     "transcribed-at": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
                     "company-code": "AUTO",
-                    "agent-name": "System"
+                    "agent-name": "System",
+                    "source-file": filename
                 },
                 "text": left_transcript.get('text', '') + ' ' + right_transcript.get('text', ''),
                 "segments": left_transcript.get('segments', []) + right_transcript.get('segments', [])
@@ -511,21 +513,25 @@ def process_transcriptions(transcript_paths, job_id: str):
     Process transcriptions after both channels are transcribed.
     This task coordinates competitor analysis and sentiment analysis using Celery chains.
     """
+    db = SessionLocal()
     try:
         # Get the transcript paths
         left_path = transcript_paths[0]
         right_path = transcript_paths[1]
 
+        # Get the original filename from the job
+        job = crud.get_job(db, UUID(job_id))
+        filename = job.filename if job else "unknown"
+
         # Chain: analyze competitors -> process each competitor -> finalize
         workflow = chain(
             analyze_competitors.s(job_id, left_path, right_path),
-            process_sentiment_analysis.s(job_id, left_path, right_path)
+            process_sentiment_analysis.s(job_id, left_path, right_path, filename)
         )
 
         workflow.apply_async()
 
     except Exception as e:
-        db = SessionLocal()
         try:
             # Get job details for notification
             job = crud.get_job(db, UUID(job_id))
@@ -548,7 +554,7 @@ def process_transcriptions(transcript_paths, job_id: str):
 
 
 @celery_app.task
-def process_sentiment_analysis(competitors_found, job_id: str, left_path: str, right_path: str):
+def process_sentiment_analysis(competitors_found, job_id: str, left_path: str, right_path: str, filename: str):
     """
     Process sentiment analysis for each competitor sequentially.
     This task is called after competitor analysis completes.
@@ -562,7 +568,7 @@ def process_sentiment_analysis(competitors_found, job_id: str, left_path: str, r
             sentiment_tasks = []
             for competitor in competitors_found:
                 sentiment_tasks.append(
-                    analyze_sentiment_for_competitor.s(job_id, competitor, left_path, right_path)
+                    analyze_sentiment_for_competitor.s(job_id, competitor, left_path, right_path, filename)
                 )
 
             # Chain all sentiment tasks together, then finalize
