@@ -112,14 +112,26 @@ def transcribe_audio_channel(self, job_id: str, channel_url: str, channel_name: 
                 tmp_audio.write(audio_response.content)
                 tmp_audio_path = tmp_audio.name
 
-            # Call transcription service
+            # Call transcription service with optimal Whisper parameters
             with open(tmp_audio_path, 'rb') as audio_file:
                 files = {'audio_file': ('audio.mp3', audio_file, 'audio/mpeg')}
+                data = {
+                    'whisper_model': 'large-v3',
+                    'compression_ratio_threshold': '2.4',
+                    'temperature': '0',
+                    'logprob_threshold': '-1.0',
+                    'no_speech_threshold': '0.8',
+                    'condition_on_previous_text': 'true',
+                    'beam_size': '5',
+                    'best_of': '5',
+                    'word_timestamps': 'false'
+                }
                 headers = {'Authorization': f'Bearer {token}'}
 
                 transcription_response = client.post(
                     f"{settings.TRANSCRIPTION_URL}/api/v1/transcriptions/",
                     files=files,
+                    data=data,
                     headers=headers
                 )
                 transcription_response.raise_for_status()
