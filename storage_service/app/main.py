@@ -6,6 +6,7 @@ from datetime import datetime
 
 from . import schemas
 from .storage import storage_manager
+from .config import settings
 
 # Configure structured logging
 logging.basicConfig(
@@ -174,7 +175,7 @@ async def health_check():
     """
     try:
         # Test MinIO connection
-        bucket_exists = storage_manager.client.bucket_exists(storage_manager.settings.MINIO_BUCKET)
+        bucket_exists = storage_manager.client.bucket_exists(settings.MINIO_BUCKET)
 
         logger.info("Health check: Storage service is healthy")
         return {
@@ -183,7 +184,7 @@ async def health_check():
             "service": "storage-api",
             "minio_connected": True,
             "bucket_exists": bucket_exists,
-            "bucket_name": storage_manager.settings.MINIO_BUCKET
+            "bucket_name": settings.MINIO_BUCKET
         }
     except Exception as e:
         logger.error(f"Health check: Storage service is unhealthy - {str(e)}")
