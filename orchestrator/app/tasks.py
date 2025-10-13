@@ -102,7 +102,7 @@ def transcribe_audio_channel(self, job_id: str, channel_url: str, channel_name: 
         # Get authentication token
         token = get_auth_token()
 
-        # Download audio file
+        # Download audio file and process transcription
         with httpx.Client(timeout=300.0) as client:
             audio_response = client.get(channel_url)
             audio_response.raise_for_status()
@@ -134,17 +134,17 @@ def transcribe_audio_channel(self, job_id: str, channel_url: str, channel_name: 
             # Clean up temporary audio file
             os.unlink(tmp_audio_path)
 
-        # Save transcript to Storage Service
-        transcript_path = f"transcripts/{job_id}/{channel_name}_transcript.json"
+            # Save transcript to Storage Service
+            transcript_path = f"transcripts/{job_id}/{channel_name}_transcript.json"
 
-        storage_response = client.post(
-            f"{settings.STORAGE_URL}/upload",
-            json={
-                "object_path": transcript_path,
-                "data": transcript_data
-            }
-        )
-        storage_response.raise_for_status()
+            storage_response = client.post(
+                f"{settings.STORAGE_URL}/upload",
+                json={
+                    "object_path": transcript_path,
+                    "data": transcript_data
+                }
+            )
+            storage_response.raise_for_status()
 
         # Update job record with transcript path
         if channel_name == 'left':
