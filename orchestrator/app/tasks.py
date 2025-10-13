@@ -469,34 +469,65 @@ def process_audio_pipeline(job_id: str):
 def process_transcriptions(transcript_paths, job_id: str):
     """
     Process transcriptions after both channels are transcribed.
-    This task coordinates competitor analysis and sentiment analysis.
+    This task coordinates competitor analysis and sentiment analysis using Celery chains.
     """
-    db = SessionLocal()
-
     try:
         # Get the transcript paths
         left_path = transcript_paths[0]
         right_path = transcript_paths[1]
 
-        # Analyze competitors
-        competitors_found = analyze_competitors.apply_async(
-            args=[job_id, left_path, right_path]
-        ).get()
+        # Chain: analyze competitors -> process each competitor -> finalize
+        workflow = chain(
+            analyze_competitors.s(job_id, left_path, right_path),
+            process_sentiment_analysis.s(job_id, left_path, right_path)
+        )
 
+        workflow.apply_async()
+
+    except Exception as e:
+        db = SessionLocal()
+        try:
+            # Get job details for notification
+            job = crud.get_job(db, UUID(job_id))
+            error_msg = f"Post-transcription processing failed: {str(e)}"
+
+            crud.update_job_status(
+                db,
+                UUID(job_id),
+                models.JobStatus.FAILED,
+                error_message=error_msg
+            )
+
+            # Send notification
+            if job:
+                send_notification(job_id, job.filename, error_msg, "process_transcriptions")
+
+            raise
+        finally:
+            db.close()
+
+
+@celery_app.task
+def process_sentiment_analysis(competitors_found, job_id: str, left_path: str, right_path: str):
+    """
+    Process sentiment analysis for each competitor sequentially.
+    This task is called after competitor analysis completes.
+    """
+    db = SessionLocal()
+
+    try:
         if competitors_found and len(competitors_found) > 0:
-            # Run sentiment analysis for each competitor SEQUENTIALLY (one at a time)
+            # Create a chain of sentiment analysis tasks (sequential processing)
             # This prevents server overload from simultaneous sentiment API calls
-            sentiment_results = []
+            sentiment_tasks = []
             for competitor in competitors_found:
-                print(f"Processing sentiment analysis for competitor: {competitor}")
-                result = analyze_sentiment_for_competitor.apply_async(
-                    args=[job_id, competitor, left_path, right_path]
-                ).get()  # .get() blocks until this task completes before moving to next
-                sentiment_results.append(result)
-                print(f"Completed sentiment analysis for {competitor}")
+                sentiment_tasks.append(
+                    analyze_sentiment_for_competitor.s(job_id, competitor, left_path, right_path)
+                )
 
-            # Finalize job
-            finalize_job.apply_async(args=[job_id, sentiment_results])
+            # Chain all sentiment tasks together, then finalize
+            workflow = chain(*sentiment_tasks, finalize_job.s(job_id))
+            workflow.apply_async()
         else:
             # No competitors found, just finalize
             finalize_job.apply_async(args=[job_id, []])
@@ -504,7 +535,7 @@ def process_transcriptions(transcript_paths, job_id: str):
     except Exception as e:
         # Get job details for notification
         job = crud.get_job(db, UUID(job_id))
-        error_msg = f"Post-transcription processing failed: {str(e)}"
+        error_msg = f"Sentiment processing coordination failed: {str(e)}"
 
         crud.update_job_status(
             db,
@@ -515,7 +546,7 @@ def process_transcriptions(transcript_paths, job_id: str):
 
         # Send notification
         if job:
-            send_notification(job_id, job.filename, error_msg, "process_transcriptions")
+            send_notification(job_id, job.filename, error_msg, "process_sentiment_analysis")
 
         raise
     finally:
