@@ -417,21 +417,24 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
 
 
 @celery_app.task
-def finalize_job(job_id: str, sentiment_results):
+def finalize_job(sentiment_result, job_id: str):
     """
     Finalize job processing and update status to COMPLETED.
 
     Args:
+        sentiment_result: Result from the last sentiment analysis task (passed by chain)
         job_id: UUID of the job
-        sentiment_results: Results from all sentiment analysis tasks
     """
     db = SessionLocal()
 
     try:
+        print(f"[DEBUG] Finalizing job {job_id}")
+        print(f"[DEBUG] Last sentiment result: {sentiment_result}")
+
         # Update job status to completed
         crud.update_job_status(db, UUID(job_id), models.JobStatus.COMPLETED)
 
-        print(f"Job {job_id} completed successfully with {len(sentiment_results)} sentiment analyses")
+        print(f"[DEBUG] Job {job_id} marked as COMPLETED successfully")
 
     except Exception as e:
         # Get job details for notification
@@ -571,6 +574,7 @@ def process_sentiment_analysis(competitors_found, job_id: str, left_path: str, r
 
     try:
         if competitors_found and len(competitors_found) > 0:
+            print(f"[DEBUG] Found {len(competitors_found)} competitors: {competitors_found}")
             # Create a chain of sentiment analysis tasks (sequential processing)
             # This prevents server overload from simultaneous sentiment API calls
             sentiment_tasks = []
@@ -580,11 +584,13 @@ def process_sentiment_analysis(competitors_found, job_id: str, left_path: str, r
                 )
 
             # Chain all sentiment tasks together, then finalize
+            # Note: finalize_job will receive the result from the last sentiment task as first parameter
             workflow = chain(*sentiment_tasks, finalize_job.s(job_id))
             workflow.apply_async()
         else:
-            # No competitors found, just finalize
-            finalize_job.apply_async(args=[job_id, []])
+            # No competitors found, just finalize with None result
+            print(f"[DEBUG] No competitors found, finalizing job {job_id}")
+            finalize_job.apply_async(args=[None, job_id])
 
     except Exception as e:
         # Get job details for notification
