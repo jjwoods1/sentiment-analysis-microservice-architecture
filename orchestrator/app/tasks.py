@@ -117,14 +117,15 @@ def transcribe_audio_channel(self, job_id: str, channel_url: str, channel_name: 
                 files = {'audio_file': ('audio.mp3', audio_file, 'audio/mpeg')}
                 data = {
                     'whisper_model': 'large-v3',
-                    'compression_ratio_threshold': '2.4',
+                    'compression_ratio_threshold': '1.8',
                     'temperature': '0',
-                    'logprob_threshold': '-1.0',
-                    'no_speech_threshold': '0.8',
-                    'condition_on_previous_text': 'true',
-                    'beam_size': '5',
-                    'best_of': '5',
-                    'word_timestamps': 'false'
+                    'logprob_threshold': '-0.8',
+                    'no_speech_threshold': '0.7',
+                    'condition_on_previous_text': 'false',
+                    'beam_size': '1',
+                    'best_of': '1',
+                    'word_timestamps': 'true',
+                    'language': 'en'
                 }
                 headers = {'Authorization': f'Bearer {token}'}
 
