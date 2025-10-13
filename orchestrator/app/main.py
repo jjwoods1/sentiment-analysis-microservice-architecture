@@ -401,6 +401,165 @@ async def get_job(
     return job
 
 
+@app.get("/analytics/overview")
+async def get_analytics_overview(db: Session = Depends(get_db)):
+    """
+    Get overall analytics overview.
+
+    Returns:
+        - Total calls processed
+        - Total competitors found
+        - Top competitors
+        - Sentiment distribution
+    """
+    from sqlalchemy import func, case
+
+    # Total jobs
+    total_jobs = db.query(func.count(models.Job.id)).filter(
+        models.Job.status == models.JobStatus.COMPLETED
+    ).scalar() or 0
+
+    # Total unique competitors mentioned
+    total_competitors = db.query(func.count(func.distinct(models.SentimentResult.competitor_name))).scalar() or 0
+
+    # Top 10 mentioned competitors
+    top_competitors = db.query(
+        models.SentimentResult.competitor_name,
+        func.count(models.SentimentResult.id).label('mention_count')
+    ).group_by(
+        models.SentimentResult.competitor_name
+    ).order_by(
+        func.count(models.SentimentResult.id).desc()
+    ).limit(10).all()
+
+    # Overall sentiment distribution
+    sentiment_distribution = db.query(
+        func.jsonb_extract_path_text(models.SentimentResult.result_json, 'overall_sentiment').label('sentiment'),
+        func.count(models.SentimentResult.id).label('count')
+    ).group_by('sentiment').all()
+
+    return {
+        "total_jobs": total_jobs,
+        "total_competitors": total_competitors,
+        "top_competitors": [
+            {"name": comp, "count": count} for comp, count in top_competitors
+        ],
+        "sentiment_distribution": [
+            {"sentiment": sent or "unknown", "count": count} for sent, count in sentiment_distribution
+        ]
+    }
+
+
+@app.get("/analytics/competitor/{competitor_name}")
+async def get_competitor_analytics(
+    competitor_name: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed analytics for a specific competitor.
+
+    Returns:
+        - Total mentions
+        - Sentiment breakdown
+        - Percentage of each sentiment
+        - Number of calls where mentioned
+    """
+    from sqlalchemy import func
+
+    # Total mentions
+    total_mentions = db.query(func.count(models.SentimentResult.id)).filter(
+        models.SentimentResult.competitor_name == competitor_name
+    ).scalar() or 0
+
+    if total_mentions == 0:
+        raise HTTPException(status_code=404, detail=f"No data found for competitor: {competitor_name}")
+
+    # Sentiment breakdown
+    sentiment_breakdown = db.query(
+        func.jsonb_extract_path_text(models.SentimentResult.result_json, 'overall_sentiment').label('sentiment'),
+        func.count(models.SentimentResult.id).label('count')
+    ).filter(
+        models.SentimentResult.competitor_name == competitor_name
+    ).group_by('sentiment').all()
+
+    # Number of unique calls
+    unique_calls = db.query(func.count(func.distinct(models.SentimentResult.job_id))).filter(
+        models.SentimentResult.competitor_name == competitor_name
+    ).scalar() or 0
+
+    # Calculate percentages
+    sentiment_data = []
+    for sentiment, count in sentiment_breakdown:
+        percentage = round((count / total_mentions) * 100, 2) if total_mentions > 0 else 0
+        sentiment_data.append({
+            "sentiment": sentiment or "unknown",
+            "count": count,
+            "percentage": percentage
+        })
+
+    return {
+        "competitor_name": competitor_name,
+        "total_mentions": total_mentions,
+        "unique_calls": unique_calls,
+        "sentiment_breakdown": sentiment_data
+    }
+
+
+@app.get("/analytics/competitors/list")
+async def get_all_competitors(db: Session = Depends(get_db)):
+    """
+    Get list of all competitors that have been mentioned.
+    """
+    from sqlalchemy import func
+
+    competitors = db.query(
+        models.SentimentResult.competitor_name,
+        func.count(models.SentimentResult.id).label('mention_count')
+    ).group_by(
+        models.SentimentResult.competitor_name
+    ).order_by(
+        models.SentimentResult.competitor_name
+    ).all()
+
+    return {
+        "competitors": [
+            {"name": comp, "mention_count": count} for comp, count in competitors
+        ]
+    }
+
+
+@app.get("/analytics/sentiment-trends")
+async def get_sentiment_trends(
+    competitor_name: str = Query(None, description="Filter by specific competitor"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get sentiment trends over time, optionally filtered by competitor.
+    """
+    from sqlalchemy import func, Date, cast
+
+    query = db.query(
+        cast(models.SentimentResult.created_at, Date).label('date'),
+        func.jsonb_extract_path_text(models.SentimentResult.result_json, 'overall_sentiment').label('sentiment'),
+        func.count(models.SentimentResult.id).label('count')
+    )
+
+    if competitor_name:
+        query = query.filter(models.SentimentResult.competitor_name == competitor_name)
+
+    trends = query.group_by('date', 'sentiment').order_by('date').all()
+
+    return {
+        "trends": [
+            {
+                "date": str(date),
+                "sentiment": sentiment or "unknown",
+                "count": count
+            } for date, sentiment, count in trends
+        ]
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
