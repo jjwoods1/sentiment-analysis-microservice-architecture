@@ -253,9 +253,7 @@ services:
       - orchestrator-api
     networks:
       - audio-network
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+    # Volume mounts removed for production - build directory is in the image
 
 networks:
   audio-network:
