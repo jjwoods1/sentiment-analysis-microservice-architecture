@@ -332,16 +332,12 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
                 "segments": left_transcript.get('segments', []) + right_transcript.get('segments', [])
             }
 
-            # Create temporary files for the API call
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as context_file:
-                context_file.write(f"Analyze sentiment regarding: {competitor_name}")
-                context_file_path = context_file.name
-
+            # Create temporary file for the transcript JSON
             with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as transcript_file:
                 json.dump(combined_transcript, transcript_file, indent=2)
                 transcript_file_path = transcript_file.name
 
-            # Call sentiment analysis service
+            # Call sentiment analysis service (matching n8n format)
             sentiment_url = f"{settings.SENTIMENT_URL}/analyze/contextual/file"
             print(f"[DEBUG] Sending sentiment analysis request to: {sentiment_url}")
             print(f"[DEBUG] Competitor: {competitor_name}")
@@ -349,13 +345,16 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
             print(f"[DEBUG] Transcript text length: {len(combined_transcript.get('text', ''))}")
             print(f"[DEBUG] Transcript segments count: {len(combined_transcript.get('segments', []))}")
 
-            with open(context_file_path, 'rb') as ctx_file, open(transcript_file_path, 'rb') as trans_file:
+            with open(transcript_file_path, 'rb') as trans_file:
+                # Match n8n format: context as form field (string), file as binary upload
                 files = {
-                    'context': ('context.txt', ctx_file, 'text/plain'),
-                    'transcript': ('transcript.json', trans_file, 'application/json')
+                    'file': ('transcript.json', trans_file, 'application/json')
+                }
+                data = {
+                    'context': competitor_name  # Send competitor name as plain text context
                 }
 
-                sentiment_response = client.post(sentiment_url, files=files)
+                sentiment_response = client.post(sentiment_url, files=files, data=data)
 
                 print(f"[DEBUG] Sentiment API response status: {sentiment_response.status_code}")
                 print(f"[DEBUG] Sentiment API response headers: {dict(sentiment_response.headers)}")
@@ -379,8 +378,7 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
                 else:
                     sentiment_result = result
 
-            # Clean up temporary files
-            os.unlink(context_file_path)
+            # Clean up temporary file
             os.unlink(transcript_file_path)
 
         # Save sentiment result to database
