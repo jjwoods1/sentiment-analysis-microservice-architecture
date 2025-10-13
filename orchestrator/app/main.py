@@ -560,6 +560,80 @@ async def get_sentiment_trends(
     }
 
 
+@app.get("/admin/database/jobs")
+async def get_all_jobs_raw(
+    limit: int = Query(1000, ge=1, le=5000),
+    db: Session = Depends(get_db)
+):
+    """
+    Get raw jobs table data for admin view.
+    """
+    jobs = db.query(models.Job).order_by(models.Job.created_at.desc()).limit(limit).all()
+
+    return {
+        "table": "jobs",
+        "count": len(jobs),
+        "rows": [
+            {
+                "id": str(job.id),
+                "filename": job.filename,
+                "status": job.status.value,
+                "error_message": job.error_message,
+                "left_channel_url": job.left_channel_url,
+                "right_channel_url": job.right_channel_url,
+                "left_transcript_path": job.left_transcript_path,
+                "right_transcript_path": job.right_transcript_path,
+                "competitors_found": job.competitors_found,
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+                "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+                "completed_at": job.completed_at.isoformat() if job.completed_at else None
+            } for job in jobs
+        ]
+    }
+
+
+@app.get("/admin/database/sentiment_results")
+async def get_all_sentiment_results_raw(
+    limit: int = Query(1000, ge=1, le=5000),
+    db: Session = Depends(get_db)
+):
+    """
+    Get raw sentiment_results table data for admin view.
+    """
+    results = db.query(models.SentimentResult).order_by(models.SentimentResult.created_at.desc()).limit(limit).all()
+
+    return {
+        "table": "sentiment_results",
+        "count": len(results),
+        "rows": [
+            {
+                "id": str(result.id),
+                "job_id": str(result.job_id),
+                "competitor_name": result.competitor_name,
+                "result_json": result.result_json,
+                "created_at": result.created_at.isoformat() if result.created_at else None
+            } for result in results
+        ]
+    }
+
+
+@app.get("/admin/storage/files")
+async def get_storage_files():
+    """
+    Get list of all files in MinIO storage.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{settings.STORAGE_URL}/list")
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve storage files: {str(e)}"
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

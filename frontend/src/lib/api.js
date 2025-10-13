@@ -147,3 +147,50 @@ export function getSentimentColor(sentiment) {
   if (s.includes('neutral')) return 'info';
   return '';
 }
+
+/**
+ * Get raw jobs table data
+ * @param {number} limit - Maximum number of rows to return
+ * @returns {Promise<Object>}
+ */
+export async function getJobsTable(limit = 1000) {
+  const response = await fetch(`${API_URL}/admin/database/jobs?limit=${limit}`);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to fetch jobs table');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Get raw sentiment_results table data
+ * @param {number} limit - Maximum number of rows to return
+ * @returns {Promise<Object>}
+ */
+export async function getSentimentResultsTable(limit = 1000) {
+  const response = await fetch(`${API_URL}/admin/database/sentiment_results?limit=${limit}`);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to fetch sentiment results table');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Get list of storage files
+ * @returns {Promise<Object>}
+ */
+export async function getStorageFiles() {
+  const response = await fetch(`${API_URL}/admin/storage/files`);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to fetch storage files');
+  }
+
+  return await response.json();
+}
