@@ -1,20 +1,37 @@
-Amazon
-Microsoft
-Google
-Apple
-IBM
-Oracle
-Salesforce
-SAP
-Adobe
-VMware
-ServiceNow
-Workday
-Zoom
-Slack
-Atlassian
-Shopify
-Square
-PayPal
-Stripe
-Twilio
+1p
+Asda
+CMLink
+CTExcel
+Ecotalk
+giffgaff
+Honest
+ID
+Lebara
+Lyca
+Sky
+SMARTY
+spusu
+Superdrug
+Talkmobile
+Tesco
+Co Op
+1 Global
+Utility Warehouse
+VOXI
+Truphone
+BT
+EE
+O2
+Vodafone
+Three
+Alternative
+Daisy
+Gamma
+GiffGaff
+Intercity
+Olive
+Onecom
+TalkTalk
+T Mobile
+TruPhone
+Virgin
