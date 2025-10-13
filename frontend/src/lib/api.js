@@ -1,9 +1,7 @@
 import { browser } from '$app/environment';
 
-// Use environment variable in browser, fallback to localhost in SSR
-const API_URL = browser && typeof window !== 'undefined'
-  ? (window.PUBLIC_API_URL || 'http://localhost:8100')
-  : 'http://localhost:8100';
+// API URL - configure this to match your server
+const API_URL = 'http://10.1.0.35:8100';
 
 /**
  * Upload an audio file for processing
