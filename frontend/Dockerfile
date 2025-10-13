@@ -14,8 +14,9 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Create a non-root user
-RUN addgroup -g 1000 appuser && adduser -D -u 1000 -G appuser appuser
+# Create a non-root user (or use existing if GID/UID already exist)
+RUN addgroup -g 1000 appuser 2>/dev/null || true
+RUN adduser -D -u 1000 -G appuser appuser 2>/dev/null || adduser -D -u 1001 -G appuser appuser
 RUN chown -R appuser:appuser /app
 USER appuser
 
