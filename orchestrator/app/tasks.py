@@ -484,14 +484,16 @@ def process_transcriptions(transcript_paths, job_id: str):
         ).get()
 
         if competitors_found and len(competitors_found) > 0:
-            # Run sentiment analysis for each competitor in parallel
-            sentiment_tasks = group(
-                analyze_sentiment_for_competitor.s(job_id, competitor, left_path, right_path)
-                for competitor in competitors_found
-            )
-
-            # Execute sentiment analysis and wait for results
-            sentiment_results = sentiment_tasks.apply_async().get()
+            # Run sentiment analysis for each competitor SEQUENTIALLY (one at a time)
+            # This prevents server overload from simultaneous sentiment API calls
+            sentiment_results = []
+            for competitor in competitors_found:
+                print(f"Processing sentiment analysis for competitor: {competitor}")
+                result = analyze_sentiment_for_competitor.apply_async(
+                    args=[job_id, competitor, left_path, right_path]
+                ).get()  # .get() blocks until this task completes before moving to next
+                sentiment_results.append(result)
+                print(f"Completed sentiment analysis for {competitor}")
 
             # Finalize job
             finalize_job.apply_async(args=[job_id, sentiment_results])
