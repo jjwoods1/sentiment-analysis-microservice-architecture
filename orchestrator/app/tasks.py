@@ -323,18 +323,8 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
             completed_competitors=str(completed)
         )
 
-        # Download both transcripts from Storage Service
+        # Download ONLY the right channel transcript for sentiment analysis
         with httpx.Client(timeout=120.0) as client:
-            left_response = client.get(f"{settings.STORAGE_URL}/download/{left_transcript_path}")
-            left_response.raise_for_status()
-            left_result = left_response.json()
-            # Handle nested data structure: data.data.data
-            left_data = left_result.get('data', {})
-            if isinstance(left_data, dict) and 'data' in left_data:
-                left_transcript = left_data.get('data', {})
-            else:
-                left_transcript = left_data
-
             right_response = client.get(f"{settings.STORAGE_URL}/download/{right_transcript_path}")
             right_response.raise_for_status()
             right_result = right_response.json()
@@ -345,32 +335,34 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
             else:
                 right_transcript = right_data
 
-            # Combine transcript texts and format with metadata for sentiment service
-            combined_transcript = {
+            # Use only right channel for sentiment analysis with metadata
+            transcript_for_sentiment = {
                 "metadata": {
                     "ref-id": str(job_id),
-                    "used-model": left_transcript.get('model', 'large-v3'),
+                    "used-model": right_transcript.get('model', 'large-v3'),
                     "transcribed-at": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
                     "company-code": "AUTO",
                     "agent-name": "System",
-                    "source-file": filename
+                    "source-file": filename,
+                    "channel": "right"
                 },
-                "text": left_transcript.get('text', '') + ' ' + right_transcript.get('text', ''),
-                "segments": left_transcript.get('segments', []) + right_transcript.get('segments', [])
+                "text": right_transcript.get('text', ''),
+                "segments": right_transcript.get('segments', [])
             }
 
             # Create temporary file for the transcript JSON
             with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as transcript_file:
-                json.dump(combined_transcript, transcript_file, indent=2)
+                json.dump(transcript_for_sentiment, transcript_file, indent=2)
                 transcript_file_path = transcript_file.name
 
             # Call sentiment analysis service (matching n8n format)
             sentiment_url = f"{settings.SENTIMENT_URL}/analyze/contextual/file"
             print(f"[DEBUG] Sending sentiment analysis request to: {sentiment_url}")
             print(f"[DEBUG] Competitor: {competitor_name}")
-            print(f"[DEBUG] Transcript metadata: {combined_transcript.get('metadata', {})}")
-            print(f"[DEBUG] Transcript text length: {len(combined_transcript.get('text', ''))}")
-            print(f"[DEBUG] Transcript segments count: {len(combined_transcript.get('segments', []))}")
+            print(f"[DEBUG] Using RIGHT CHANNEL ONLY for sentiment analysis")
+            print(f"[DEBUG] Transcript metadata: {transcript_for_sentiment.get('metadata', {})}")
+            print(f"[DEBUG] Transcript text length: {len(transcript_for_sentiment.get('text', ''))}")
+            print(f"[DEBUG] Transcript segments count: {len(transcript_for_sentiment.get('segments', []))}")
 
             with open(transcript_file_path, 'rb') as trans_file:
                 # Match n8n format: context as form field (string), file as binary upload
@@ -466,19 +458,25 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
 
 
 @celery_app.task
-def finalize_job(sentiment_result, job_id: str):
+def finalize_job(previous_result):
     """
     Finalize job processing and update status to COMPLETED.
 
     Args:
-        sentiment_result: Result from the last sentiment analysis task (passed by chain)
-        job_id: UUID of the job
+        previous_result: Result dict from the last sentiment analysis task containing job_id
     """
     db = SessionLocal()
 
     try:
+        # Extract job_id from the result dict
+        if isinstance(previous_result, dict):
+            job_id = previous_result.get('job_id')
+        else:
+            # Fallback if called with just job_id string
+            job_id = previous_result
+
         print(f"[DEBUG] Finalizing job {job_id}")
-        print(f"[DEBUG] Last sentiment result: {sentiment_result}")
+        print(f"[DEBUG] Previous result: {previous_result}")
 
         # Update progress to 100%
         crud.update_job_progress(db, UUID(job_id), "Finalizing job", "100%")
@@ -650,16 +648,16 @@ def process_sentiment_analysis(competitors_found, job_id: str, left_path: str, r
                     analyze_sentiment_for_competitor.s(competitor, left_path, right_path, filename)
                 )
 
-            # Add finalize job at the end - it receives the final dict with job_id
-            sentiment_tasks.append(finalize_job.s(job_id))
+            # Add finalize job at the end - it will receive the final dict from last sentiment task
+            sentiment_tasks.append(finalize_job.s())
 
             # Create and execute the chain, starting with job_id as initial value
             workflow = chain(*sentiment_tasks)
             workflow.apply_async(args=(job_id,))
         else:
-            # No competitors found, just finalize with None result
+            # No competitors found, just finalize with job_id
             print(f"[DEBUG] No competitors found, finalizing job {job_id}")
-            finalize_job.apply_async(args=[None, job_id])
+            finalize_job.apply_async(args=[job_id])
 
     except Exception as e:
         # Get job details for notification

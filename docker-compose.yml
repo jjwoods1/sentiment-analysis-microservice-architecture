@@ -157,7 +157,7 @@ services:
       context: ./orchestrator
       dockerfile: Dockerfile
     container_name: audio-celery-beat
-    command: celery -A app.celery_app beat --loglevel=info
+    command: celery -A app.celery_app beat --loglevel=info --scheduler celery.beat:PersistentScheduler
     environment:
       DATABASE_URL: postgresql://audiouser:audiopass@postgres:5432/audiodb
       REDIS_URL: redis://redis:6379/0
@@ -183,10 +183,14 @@ services:
         condition: service_healthy
       orchestrator-api:
         condition: service_healthy
+      worker:
+        condition: service_healthy
     networks:
       - audio-network
     volumes:
       - ./orchestrator:/app
+      - celery_beat_data:/app/celerybeat
+    restart: unless-stopped
 
   analysis-api:
     build:
@@ -298,3 +302,4 @@ networks:
 volumes:
   postgres_data:
   minio_data:
+  celery_beat_data:
