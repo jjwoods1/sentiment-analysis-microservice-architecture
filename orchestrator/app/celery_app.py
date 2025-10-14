@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 from .config import settings
 
 celery_app = Celery(
@@ -20,4 +21,11 @@ celery_app.conf.update(
     task_soft_time_limit=3300,  # 55 minutes
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=1000,
+    # Periodic task configuration
+    beat_schedule={
+        'check-stuck-jobs': {
+            'task': 'app.tasks.check_stuck_jobs',
+            'schedule': 300.0,  # Run every 5 minutes
+        },
+    },
 )

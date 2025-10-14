@@ -283,25 +283,32 @@ def analyze_competitors(self, job_id: str, left_transcript_path: str, right_tran
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
-def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, left_transcript_path: str, right_transcript_path: str, filename: str = "unknown"):
+def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str, left_transcript_path: str, right_transcript_path: str, filename: str = "unknown"):
     """
     Analyze sentiment for a specific competitor with retry logic.
 
     Expected sentiment response format: [] (empty array) or array with results
 
     Args:
-        job_id: UUID of the job
+        previous_result: Result from previous task (dict with job_id) or job_id string for first task
         competitor_name: Name of the competitor to analyze
         left_transcript_path: Storage path to left channel transcript
         right_transcript_path: Storage path to right channel transcript
         filename: Original audio filename
 
     Returns:
-        Sentiment analysis result
+        Dict with job_id and paths to pass to next task in chain
     """
     db = SessionLocal()
 
     try:
+        # Extract job_id from previous result (handles both dict and string)
+        if isinstance(previous_result, dict):
+            job_id = previous_result.get('job_id')
+        else:
+            # First task in chain receives job_id as string
+            job_id = previous_result
+
         # Get current progress to calculate percentage
         job = crud.get_job(db, UUID(job_id))
         total = int(job.total_competitors) if job and job.total_competitors else 1
@@ -417,7 +424,14 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
             completed_competitors=str(completed + 1)
         )
 
-        return sentiment_result
+        # Return context needed for next task in chain
+        return {
+            "job_id": job_id,
+            "left_path": left_transcript_path,
+            "right_path": right_transcript_path,
+            "filename": filename,
+            "last_result": sentiment_result
+        }
 
     except Exception as e:
         db.close()
@@ -439,7 +453,14 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
                 competitor_name,
                 error_result
             )
-            return error_result
+            # Return context for chain continuation even on error
+            return {
+                "job_id": job_id,
+                "left_path": left_transcript_path,
+                "right_path": right_transcript_path,
+                "filename": filename,
+                "last_result": error_result
+            }
     finally:
         db.close()
 
@@ -616,18 +637,25 @@ def process_sentiment_analysis(competitors_found, job_id: str, left_path: str, r
                 completed_competitors="0"
             )
 
-            # Create a chain of sentiment analysis tasks (sequential processing)
-            # This prevents server overload from simultaneous sentiment API calls
-            sentiment_tasks = []
-            for competitor in competitors_found:
+            # Build a chain of sentiment tasks that run sequentially
+            # Each task receives: (previous_result, competitor_name, left_path, right_path, filename)
+            # First task receives job_id as previous_result
+            sentiment_tasks = [
+                analyze_sentiment_for_competitor.s(competitors_found[0], left_path, right_path, filename)
+            ]
+
+            # Subsequent tasks will receive the dict result from previous task
+            for competitor in competitors_found[1:]:
                 sentiment_tasks.append(
-                    analyze_sentiment_for_competitor.s(job_id, competitor, left_path, right_path, filename)
+                    analyze_sentiment_for_competitor.s(competitor, left_path, right_path, filename)
                 )
 
-            # Chain all sentiment tasks together, then finalize
-            # Note: finalize_job will receive the result from the last sentiment task as first parameter
-            workflow = chain(*sentiment_tasks, finalize_job.s(job_id))
-            workflow.apply_async()
+            # Add finalize job at the end - it receives the final dict with job_id
+            sentiment_tasks.append(finalize_job.s(job_id))
+
+            # Create and execute the chain, starting with job_id as initial value
+            workflow = chain(*sentiment_tasks)
+            workflow.apply_async(args=(job_id,))
         else:
             # No competitors found, just finalize with None result
             print(f"[DEBUG] No competitors found, finalizing job {job_id}")
@@ -650,5 +678,93 @@ def process_sentiment_analysis(competitors_found, job_id: str, left_path: str, r
             send_notification(job_id, job.filename, error_msg, "process_sentiment_analysis")
 
         raise
+    finally:
+        db.close()
+
+
+@celery_app.task
+def check_stuck_jobs():
+    """
+    Periodic task to check for jobs stuck in PROCESSING status for more than 30 minutes.
+    Marks them as FAILED and attempts to revoke related Celery tasks.
+    """
+    db = SessionLocal()
+
+    try:
+        from datetime import timedelta
+
+        # Find jobs that have been processing for more than 30 minutes
+        timeout_threshold = datetime.utcnow() - timedelta(minutes=30)
+
+        # Query for jobs in PROCESSING status that haven't been updated recently
+        stuck_jobs = db.query(models.Job).filter(
+            models.Job.status == models.JobStatus.PROCESSING,
+            models.Job.updated_at < timeout_threshold
+        ).all()
+
+        if stuck_jobs:
+            print(f"[TIMEOUT CHECK] Found {len(stuck_jobs)} stuck jobs")
+
+        for job in stuck_jobs:
+            job_id_str = str(job.id)
+            print(f"[TIMEOUT CHECK] Job {job_id_str} has been processing for >30 minutes. Marking as FAILED.")
+
+            # Update job status to FAILED
+            error_msg = "Job processing timed out after 30 minutes. System automatically marked as failed."
+            crud.update_job_status(
+                db,
+                job.id,
+                models.JobStatus.FAILED,
+                error_message=error_msg
+            )
+
+            # Try to revoke all related Celery tasks for this job
+            # Note: This will revoke tasks that match the job_id in their arguments
+            try:
+                from celery.task.control import revoke
+                from celery import current_app
+
+                # Get active tasks from Celery
+                inspect = current_app.control.inspect()
+                active_tasks = inspect.active()
+
+                if active_tasks:
+                    tasks_revoked = 0
+                    for worker, tasks in active_tasks.items():
+                        for task in tasks:
+                            # Check if this task is related to the stuck job
+                            task_args = task.get('args', [])
+                            task_kwargs = task.get('kwargs', {})
+
+                            # Check if job_id appears in args or kwargs
+                            if (job_id_str in str(task_args) or
+                                job_id_str in str(task_kwargs)):
+                                task_id = task.get('id')
+                                if task_id:
+                                    print(f"[TIMEOUT CHECK] Revoking task {task_id} for job {job_id_str}")
+                                    revoke(task_id, terminate=True, signal='SIGKILL')
+                                    tasks_revoked += 1
+
+                    if tasks_revoked > 0:
+                        print(f"[TIMEOUT CHECK] Revoked {tasks_revoked} tasks for job {job_id_str}")
+                    else:
+                        print(f"[TIMEOUT CHECK] No active tasks found for job {job_id_str}")
+
+            except Exception as revoke_error:
+                print(f"[TIMEOUT CHECK] Error revoking tasks for job {job_id_str}: {str(revoke_error)}")
+
+            # Send notification
+            try:
+                send_notification(job_id_str, job.filename, error_msg, "check_stuck_jobs")
+            except Exception as notify_error:
+                print(f"[TIMEOUT CHECK] Error sending notification for job {job_id_str}: {str(notify_error)}")
+
+        if not stuck_jobs:
+            print("[TIMEOUT CHECK] No stuck jobs found")
+
+    except Exception as e:
+        print(f"[TIMEOUT CHECK] Error checking for stuck jobs: {str(e)}")
+        import traceback
+        traceback.print_exc()
     finally:
         db.close()
