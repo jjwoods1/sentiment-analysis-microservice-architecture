@@ -152,6 +152,42 @@ services:
       retries: 3
       start_period: 40s
 
+  celery-beat:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: audio-celery-beat
+    command: celery -A app.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://audiouser:audiopass@postgres:5432/audiodb
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: audio-transcripts
+      MINIO_SECURE: "false"
+      API_KEY: your-secure-api-key-change-in-production
+      AUTH_URL: ${AUTH_URL}
+      AUTH_USERNAME: ${AUTH_USERNAME}
+      AUTH_PASSWORD: ${AUTH_PASSWORD}
+      SPLIT_URL: ${SPLIT_URL}
+      TRANSCRIPTION_URL: ${TRANSCRIPTION_URL}
+      SENTIMENT_URL: ${SENTIMENT_URL}
+      ANALYSIS_URL: http://analysis-api:8001
+      STORAGE_URL: http://storage-api:8002
+      NOTIFICATION_URL: http://notification-api:8003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      orchestrator-api:
+        condition: service_healthy
+    networks:
+      - audio-network
+    volumes:
+      - ./orchestrator:/app
+
   analysis-api:
     build:
       context: ./analysis_service
