@@ -90,6 +90,24 @@
       </p>
     </header>
 
+    <!-- Progress Bar -->
+    {#if job.status === 'PROCESSING' && job.progress_percentage}
+      <div class="progress-container">
+        <div class="progress-header">
+          <span class="progress-label">{job.current_step || 'Processing...'}</span>
+          <span class="progress-percent">{job.progress_percentage}</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: {job.progress_percentage}"></div>
+        </div>
+        {#if job.total_competitors && job.completed_competitors}
+          <p class="progress-subtext">
+            Analyzed {job.completed_competitors} of {job.total_competitors} competitors
+          </p>
+        {/if}
+      </div>
+    {/if}
+
     <h3>Basic Information</h3>
     <table>
       <tbody>
@@ -209,5 +227,60 @@
 
   summary:hover {
     background-color: var(--muted-border-color);
+  }
+
+  .progress-container {
+    background-color: var(--card-background-color);
+    border: 1px solid var(--muted-border-color);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin: 2rem 0;
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .progress-label {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--primary);
+  }
+
+  .progress-percent {
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: var(--primary);
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 24px;
+    background-color: var(--muted-border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4CAF50, #8BC34A);
+    border-radius: 12px;
+    transition: width 0.5s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 0.5rem;
+    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+  }
+
+  .progress-subtext {
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+    color: var(--muted-color);
+    text-align: center;
   }
 </style>

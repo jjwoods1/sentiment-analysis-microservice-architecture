@@ -127,3 +127,26 @@ def get_sentiment_results_by_job(db: Session, job_id: UUID) -> List[models.Senti
     return db.query(models.SentimentResult).filter(
         models.SentimentResult.job_id == job_id
     ).all()
+
+
+def update_job_progress(
+    db: Session,
+    job_id: UUID,
+    current_step: str,
+    progress_percentage: str,
+    total_competitors: Optional[str] = None,
+    completed_competitors: Optional[str] = None
+) -> Optional[models.Job]:
+    """Update job progress tracking fields."""
+    db_job = get_job(db, job_id)
+    if db_job:
+        db_job.current_step = current_step
+        db_job.progress_percentage = progress_percentage
+        if total_competitors is not None:
+            db_job.total_competitors = total_competitors
+        if completed_competitors is not None:
+            db_job.completed_competitors = completed_competitors
+        db_job.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(db_job)
+    return db_job

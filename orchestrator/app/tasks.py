@@ -99,6 +99,9 @@ def transcribe_audio_channel(self, job_id: str, channel_url: str, channel_name: 
     db = SessionLocal()
 
     try:
+        # Update progress
+        progress = "25%" if channel_name == "left" else "40%"
+        crud.update_job_progress(db, UUID(job_id), f"Transcribing {channel_name} channel", progress)
         # Get authentication token
         token = get_auth_token()
 
@@ -210,6 +213,9 @@ def analyze_competitors(self, job_id: str, left_transcript_path: str, right_tran
     db = SessionLocal()
 
     try:
+        # Update progress
+        crud.update_job_progress(db, UUID(job_id), "Analyzing for competitors", "55%")
+
         # Download both transcripts from Storage Service
         with httpx.Client(timeout=30.0) as client:
             left_response = client.get(f"{settings.STORAGE_URL}/download/{left_transcript_path}")
@@ -296,6 +302,20 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
     db = SessionLocal()
 
     try:
+        # Get current progress to calculate percentage
+        job = crud.get_job(db, UUID(job_id))
+        total = int(job.total_competitors) if job and job.total_competitors else 1
+        completed = int(job.completed_competitors) if job and job.completed_competitors else 0
+
+        # Update progress for this competitor
+        progress_pct = 60 + int((completed / total) * 35)  # 60-95% range for sentiment analysis
+        crud.update_job_progress(
+            db, UUID(job_id),
+            f"Analyzing sentiment for {competitor_name} ({completed + 1}/{total})",
+            f"{progress_pct}%",
+            completed_competitors=str(completed)
+        )
+
         # Download both transcripts from Storage Service
         with httpx.Client(timeout=120.0) as client:
             left_response = client.get(f"{settings.STORAGE_URL}/download/{left_transcript_path}")
@@ -389,6 +409,14 @@ def analyze_sentiment_for_competitor(self, job_id: str, competitor_name: str, le
             sentiment_result
         )
 
+        # Update completed count
+        crud.update_job_progress(
+            db, UUID(job_id),
+            f"Completed sentiment for {competitor_name}",
+            f"{progress_pct}%",
+            completed_competitors=str(completed + 1)
+        )
+
         return sentiment_result
 
     except Exception as e:
@@ -430,6 +458,9 @@ def finalize_job(sentiment_result, job_id: str):
     try:
         print(f"[DEBUG] Finalizing job {job_id}")
         print(f"[DEBUG] Last sentiment result: {sentiment_result}")
+
+        # Update progress to 100%
+        crud.update_job_progress(db, UUID(job_id), "Finalizing job", "100%")
 
         # Update job status to completed
         crud.update_job_status(db, UUID(job_id), models.JobStatus.COMPLETED)
@@ -575,6 +606,16 @@ def process_sentiment_analysis(competitors_found, job_id: str, left_path: str, r
     try:
         if competitors_found and len(competitors_found) > 0:
             print(f"[DEBUG] Found {len(competitors_found)} competitors: {competitors_found}")
+
+            # Set total competitors count for progress tracking
+            crud.update_job_progress(
+                db, UUID(job_id),
+                f"Starting sentiment analysis for {len(competitors_found)} competitors",
+                "60%",
+                total_competitors=str(len(competitors_found)),
+                completed_competitors="0"
+            )
+
             # Create a chain of sentiment analysis tasks (sequential processing)
             # This prevents server overload from simultaneous sentiment API calls
             sentiment_tasks = []

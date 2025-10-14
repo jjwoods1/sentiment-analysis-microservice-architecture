@@ -33,6 +33,12 @@ class Job(Base):
     # Competitor analysis results
     competitors_found = Column(ARRAY(String), nullable=True)
 
+    # Progress tracking
+    current_step = Column(String, nullable=True)  # e.g., "Transcribing left channel", "Analyzing competitors"
+    progress_percentage = Column(String, nullable=True)  # e.g., "25%", "50%", "75%"
+    total_competitors = Column(String, nullable=True)  # Total competitors to analyze
+    completed_competitors = Column(String, nullable=True)  # How many sentiment analyses completed
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
