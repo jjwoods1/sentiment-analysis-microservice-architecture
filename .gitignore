@@ -67,3 +67,8 @@ htmlcov/
 
 # Alembic
 alembic/versions/*.pyc
+
+# Celery Beat
+celerybeat-schedule
+celerybeat-schedule.db
+celerybeat.pid

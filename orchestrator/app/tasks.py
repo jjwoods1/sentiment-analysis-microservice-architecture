@@ -328,12 +328,23 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
             right_response = client.get(f"{settings.STORAGE_URL}/download/{right_transcript_path}")
             right_response.raise_for_status()
             right_result = right_response.json()
+
+            # DEBUG: Log the raw response from storage
+            print(f"[DEBUG] Raw storage response for right channel: {json.dumps(right_result, indent=2)[:1000]}")
+
             # Handle nested data structure: data.data.data
             right_data = right_result.get('data', {})
             if isinstance(right_data, dict) and 'data' in right_data:
                 right_transcript = right_data.get('data', {})
             else:
                 right_transcript = right_data
+
+            # DEBUG: Log what we received from storage
+            print(f"[DEBUG] Right transcript data received from storage: {json.dumps(right_transcript, indent=2)[:1000]}")
+            print(f"[DEBUG] Right transcript has 'text' key: {'text' in right_transcript}")
+            print(f"[DEBUG] Right transcript 'text' value: {right_transcript.get('text', 'MISSING')[:200]}")
+            print(f"[DEBUG] Right transcript has 'segments' key: {'segments' in right_transcript}")
+            print(f"[DEBUG] Right transcript 'segments' count: {len(right_transcript.get('segments', []))}")
 
             # Use only right channel for sentiment analysis with metadata
             transcript_for_sentiment = {

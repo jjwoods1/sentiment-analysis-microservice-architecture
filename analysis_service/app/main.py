@@ -37,9 +37,9 @@ async def health_check():
     """
     try:
         # Test competitor list loading
-        from .logic import CompetitorFinder
-        finder = CompetitorFinder()
-        competitor_count = len(finder.competitors)
+        from .logic import CompetitorAnalyzer
+        analyzer = CompetitorAnalyzer()
+        competitor_count = len(analyzer.competitors)
 
         logger.info(f"Health check: Analysis service is healthy with {competitor_count} competitors loaded")
         return {

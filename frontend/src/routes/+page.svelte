@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { uploadAudioFile, getJobs, formatDate, getStatusColor } from '$lib/api.js';
 
@@ -9,21 +9,66 @@
   let jobs = [];
   let loading = true;
   let error = '';
+  let pollInterval = null;
 
   onMount(async () => {
     await loadJobs();
+
+    // Start polling every 5 seconds if there are jobs in progress
+    startPollingIfNeeded();
   });
 
-  async function loadJobs() {
+  onDestroy(() => {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+    }
+  });
+
+  function startPollingIfNeeded() {
+    // Check if any jobs are in PROCESSING or PENDING status
+    const hasActiveJobs = jobs.some(job =>
+      job.status === 'PROCESSING' || job.status === 'PENDING'
+    );
+
+    if (hasActiveJobs && !pollInterval) {
+      pollInterval = setInterval(async () => {
+        await loadJobs(true); // Silent refresh
+
+        // Stop polling if no more active jobs
+        const stillHasActiveJobs = jobs.some(job =>
+          job.status === 'PROCESSING' || job.status === 'PENDING'
+        );
+
+        if (!stillHasActiveJobs && pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+      }, 5000);
+    } else if (!hasActiveJobs && pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  }
+
+  async function loadJobs(silent = false) {
     try {
-      loading = true;
+      if (!silent) {
+        loading = true;
+      }
       error = '';
       const response = await getJobs();
       jobs = response.jobs;
+
+      // Update polling status after loading jobs
+      if (silent) {
+        startPollingIfNeeded();
+      }
     } catch (e) {
       error = e.message;
     } finally {
-      loading = false;
+      if (!silent) {
+        loading = false;
+      }
     }
   }
 
