@@ -433,11 +433,11 @@ async def get_analytics_overview(db: Session = Depends(get_db)):
         func.count(models.SentimentResult.id).desc()
     ).limit(10).all()
 
-    # Overall sentiment distribution
+    # Overall sentiment distribution (now using direct sentiment column)
     sentiment_distribution = db.query(
-        func.jsonb_extract_path_text(models.SentimentResult.result_json, 'overall_sentiment').label('sentiment'),
+        models.SentimentResult.sentiment,
         func.count(models.SentimentResult.id).label('count')
-    ).group_by('sentiment').all()
+    ).group_by(models.SentimentResult.sentiment).all()
 
     return {
         "total_jobs": total_jobs,
@@ -475,13 +475,13 @@ async def get_competitor_analytics(
     if total_mentions == 0:
         raise HTTPException(status_code=404, detail=f"No data found for competitor: {competitor_name}")
 
-    # Sentiment breakdown
+    # Sentiment breakdown (now using direct sentiment column)
     sentiment_breakdown = db.query(
-        func.jsonb_extract_path_text(models.SentimentResult.result_json, 'overall_sentiment').label('sentiment'),
+        models.SentimentResult.sentiment,
         func.count(models.SentimentResult.id).label('count')
     ).filter(
         models.SentimentResult.competitor_name == competitor_name
-    ).group_by('sentiment').all()
+    ).group_by(models.SentimentResult.sentiment).all()
 
     # Number of unique calls
     unique_calls = db.query(func.count(func.distinct(models.SentimentResult.job_id))).filter(
@@ -541,14 +541,14 @@ async def get_sentiment_trends(
 
     query = db.query(
         cast(models.SentimentResult.created_at, Date).label('date'),
-        func.jsonb_extract_path_text(models.SentimentResult.result_json, 'overall_sentiment').label('sentiment'),
+        models.SentimentResult.sentiment,
         func.count(models.SentimentResult.id).label('count')
     )
 
     if competitor_name:
         query = query.filter(models.SentimentResult.competitor_name == competitor_name)
 
-    trends = query.group_by('date', 'sentiment').order_by('date').all()
+    trends = query.group_by('date', models.SentimentResult.sentiment).order_by('date').all()
 
     return {
         "trends": [
@@ -611,7 +611,15 @@ async def get_all_sentiment_results_raw(
                 "id": str(result.id),
                 "job_id": str(result.job_id),
                 "competitor_name": result.competitor_name,
-                "result_json": result.result_json,
+                "segment_text": result.segment_text,
+                "sentiment": result.sentiment,
+                "detection_method": result.detection_method,
+                "detection_details": result.detection_details,
+                "segment_id": result.segment_id,
+                "start_time": result.start_time,
+                "end_time": result.end_time,
+                "context": result.context,
+                "metadata_json": result.metadata_json,
                 "created_at": result.created_at.isoformat() if result.created_at else None
             } for result in results
         ]

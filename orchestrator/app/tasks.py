@@ -411,13 +411,34 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
             # Clean up temporary file
             os.unlink(transcript_file_path)
 
-        # Save sentiment result to database
-        crud.create_sentiment_result(
-            db,
-            UUID(job_id),
-            competitor_name,
-            sentiment_result
-        )
+        # Save each segment as an individual database record
+        segments = sentiment_result.get('segments', [])
+        context = sentiment_result.get('context', competitor_name)
+        metadata = sentiment_result.get('metadata', {})
+
+        print(f"[DEBUG] Saving {len(segments)} sentiment segments for {competitor_name}")
+
+        for segment in segments:
+            try:
+                crud.create_sentiment_result_segment(
+                    db,
+                    job_id=UUID(job_id),
+                    competitor_name=competitor_name,
+                    segment_text=segment.get('text', ''),
+                    sentiment=segment.get('sentiment', 'neutral'),
+                    detection_method=segment.get('detection_method', 'unknown'),
+                    detection_details=segment.get('detection_details', ''),
+                    segment_id=str(segment.get('segment-id', segment.get('segment_id', ''))),
+                    start_time=str(segment.get('start', '')),
+                    end_time=str(segment.get('end', '')),
+                    context=context,
+                    metadata_json=metadata
+                )
+            except Exception as seg_error:
+                print(f"[ERROR] Failed to save segment {segment.get('segment-id', 'unknown')}: {str(seg_error)}")
+                # Continue saving other segments even if one fails
+
+        print(f"[DEBUG] Successfully saved {len(segments)} segments for {competitor_name}")
 
         # Update completed count
         crud.update_job_progress(
@@ -444,18 +465,7 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
         except MaxRetriesExceededError:
             # Log error but don't fail the entire job
             print(f"Sentiment analysis failed for {competitor_name} after 3 retries: {str(e)}")
-            # Save error result
-            error_result = {
-                "error": str(e),
-                "competitor": competitor_name,
-                "overall_sentiment": "error"
-            }
-            crud.create_sentiment_result(
-                db,
-                UUID(job_id),
-                competitor_name,
-                error_result
-            )
+            # Don't save error results as segments - just log and continue
             # Return context for chain continuation even on error
             return {
                 "job_id": job_id,

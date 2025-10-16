@@ -158,20 +158,69 @@
     {#if job.sentiment_results && job.sentiment_results.length > 0}
       <h3 style="margin-top: 2rem;">Sentiment Analysis Results</h3>
 
-      {#each job.sentiment_results as result}
+      {@const groupedResults = job.sentiment_results.reduce((acc, result) => {
+        if (!acc[result.competitor_name]) {
+          acc[result.competitor_name] = [];
+        }
+        acc[result.competitor_name].push(result);
+        return acc;
+      }, {})}
+
+      {#each Object.entries(groupedResults) as [competitorName, segments]}
+        {@const posCount = segments.filter(s => s.sentiment.toLowerCase() === 'positive').length}
+        {@const negCount = segments.filter(s => s.sentiment.toLowerCase() === 'negative').length}
+        {@const neuCount = segments.filter(s => s.sentiment.toLowerCase() === 'neutral').length}
+        {@const overallSentiment = posCount > negCount ? (posCount > neuCount ? 'positive' : 'neutral') : (negCount > neuCount ? 'negative' : 'neutral')}
+
         <details open>
           <summary>
-            <strong>{result.competitor_name}</strong>
-            {#if result.result_json.overall_sentiment}
-              - <mark class={getSentimentColor(result.result_json.overall_sentiment)}>
-                {result.result_json.overall_sentiment}
-              </mark>
-            {/if}
+            <strong>{competitorName}</strong>
+            <span style="margin-left: 1rem;">
+              ({segments.length} mention{segments.length !== 1 ? 's' : ''})
+            </span>
+            <mark class={getSentimentColor(overallSentiment)} style="margin-left: 0.5rem;">
+              {overallSentiment}
+            </mark>
           </summary>
 
           <article style="margin-top: 1rem;">
-            <h4>Analysis Details</h4>
-            <pre style="background-color: var(--code-background-color); padding: 1rem; border-radius: 0.25rem; overflow-x: auto; max-height: 400px; overflow-y: auto;"><code>{JSON.stringify(result.result_json, null, 2)}</code></pre>
+            <div class="sentiment-summary">
+              <span class="stat positive">{posCount} Positive</span>
+              <span class="stat negative">{negCount} Negative</span>
+              <span class="stat neutral">{neuCount} Neutral</span>
+            </div>
+
+            <div class="segments-container">
+              {#each segments as segment}
+                <div class="segment-card">
+                  <div class="segment-header">
+                    <mark class={getSentimentColor(segment.sentiment)}>
+                      {segment.sentiment}
+                    </mark>
+                    <span class="detection-method">
+                      {segment.detection_method === 'llm-based' ? 'LLM Based' : 'Rule Based'}
+                    </span>
+                  </div>
+
+                  <blockquote class="segment-text">
+                    "{segment.segment_text}"
+                  </blockquote>
+
+                  <div class="segment-meta">
+                    {#if segment.start_time && segment.end_time}
+                      <small class="timestamp">
+                        {Math.floor(parseFloat(segment.start_time) / 60)}:{String(Math.floor(parseFloat(segment.start_time) % 60)).padStart(2, '0')}
+                        -
+                        {Math.floor(parseFloat(segment.end_time) / 60)}:{String(Math.floor(parseFloat(segment.end_time) % 60)).padStart(2, '0')}
+                      </small>
+                    {/if}
+                    {#if segment.detection_details}
+                      <small class="detection-details">{segment.detection_details}</small>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
           </article>
         </details>
       {/each}
@@ -282,5 +331,97 @@
     font-size: 0.9rem;
     color: var(--muted-color);
     text-align: center;
+  }
+
+  .sentiment-summary {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: var(--card-background-color);
+    border-radius: 0.25rem;
+    justify-content: center;
+  }
+
+  .sentiment-summary .stat {
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    font-weight: 600;
+  }
+
+  .sentiment-summary .stat.positive {
+    background-color: var(--ins-color);
+    color: white;
+  }
+
+  .sentiment-summary .stat.negative {
+    background-color: var(--del-color);
+    color: white;
+  }
+
+  .sentiment-summary .stat.neutral {
+    background-color: var(--primary);
+    color: white;
+  }
+
+  .segments-container {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .segment-card {
+    background-color: var(--card-background-color);
+    border: 1px solid var(--muted-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .segment-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .segment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .detection-method {
+    font-size: 0.875rem;
+    color: var(--muted-color);
+    background-color: var(--muted-border-color);
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+  }
+
+  .segment-text {
+    margin: 1rem 0;
+    padding-left: 1rem;
+    border-left: 3px solid var(--primary);
+    font-style: italic;
+    color: var(--color);
+  }
+
+  .segment-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .segment-meta small {
+    color: var(--muted-color);
+    font-size: 0.875rem;
+  }
+
+  .segment-meta .timestamp {
+    font-family: monospace;
+  }
+
+  .segment-meta .detection-details {
+    font-style: italic;
   }
 </style>

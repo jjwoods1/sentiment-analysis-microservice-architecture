@@ -21,11 +21,22 @@ services:
   redis:
     image: redis:7-alpine
     container_name: audio-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --bind 0.0.0.0
+      --protected-mode yes
+      --rename-command FLUSHDB ""
+      --rename-command FLUSHALL ""
+      --rename-command CONFIG ""
+      --rename-command DEBUG ""
+      --rename-command SHUTDOWN ""
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-    ports:
-      - "6379:6379"
+    # Port removed - Redis only accessible within Docker network
+    # This prevents external RCE attacks while allowing internal services to connect
     networks:
       - audio-network
     healthcheck:

@@ -53,8 +53,23 @@ class SentimentResult(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
-    competitor_name = Column(String, nullable=False)
-    result_json = Column(JSONB, nullable=False)
+    competitor_name = Column(String, nullable=False, index=True)
+
+    # Individual segment data
+    segment_text = Column(Text, nullable=False)
+    sentiment = Column(String, nullable=False, index=True)  # positive, negative, neutral
+    detection_method = Column(String, nullable=False)  # llm-based or rule-based
+    detection_details = Column(String, nullable=True)  # e.g., "Model: Llama 2 7B" or "Matched pattern: 'very slow'"
+
+    # Segment metadata
+    segment_id = Column(String, nullable=True)
+    start_time = Column(String, nullable=True)  # Store as string for flexibility
+    end_time = Column(String, nullable=True)
+
+    # Additional metadata from sentiment analysis
+    context = Column(String, nullable=True)  # The search context used
+    metadata_json = Column(JSONB, nullable=True)  # Store any additional metadata
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships

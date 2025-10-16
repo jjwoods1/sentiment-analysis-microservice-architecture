@@ -104,17 +104,33 @@ def update_job_competitors(
     return db_job
 
 
-def create_sentiment_result(
+def create_sentiment_result_segment(
     db: Session,
     job_id: UUID,
     competitor_name: str,
-    result_json: dict
+    segment_text: str,
+    sentiment: str,
+    detection_method: str,
+    detection_details: Optional[str] = None,
+    segment_id: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    context: Optional[str] = None,
+    metadata_json: Optional[dict] = None
 ) -> models.SentimentResult:
-    """Create a sentiment analysis result for a job."""
+    """Create a sentiment analysis result for a single segment."""
     db_result = models.SentimentResult(
         job_id=job_id,
         competitor_name=competitor_name,
-        result_json=result_json
+        segment_text=segment_text,
+        sentiment=sentiment,
+        detection_method=detection_method,
+        detection_details=detection_details,
+        segment_id=segment_id,
+        start_time=start_time,
+        end_time=end_time,
+        context=context,
+        metadata_json=metadata_json
     )
     db.add(db_result)
     db.commit()
