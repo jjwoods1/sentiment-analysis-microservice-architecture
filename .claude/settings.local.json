@@ -7,7 +7,16 @@
       "Bash(git commit:*)",
       "Bash(git remote add:*)",
       "Bash(git branch:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(cat:*)",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(docker logs:*)",
+      "Bash(python -c \"\n# Simulate the data being sent to sentiment API\nimport json\n\n# This is the data structure being created in tasks.py lines 339-351\ntranscript_for_sentiment = {\n    ''metadata'': {\n        ''ref-id'': ''test-job-id'',\n        ''used-model'': ''large-v3'',\n        ''transcribed-at'': ''2025-10-15 12:00:00'',\n        ''company-code'': ''AUTO'',\n        ''agent-name'': ''System'',\n        ''source-file'': ''test.mp3'',\n        ''channel'': ''right''\n    },\n    ''text'': ''This is a sample transcript about Ee and Three'',\n    ''segments'': [\n        {''id'': 0, ''start'': 0.0, ''end'': 2.5, ''text'': ''This is a sample''},\n        {''id'': 1, ''start'': 2.5, ''end'': 5.0, ''text'': ''transcript about Ee and Three''}\n    ]\n}\n\nprint(''Data structure being sent:'')\nprint(json.dumps(transcript_for_sentiment, indent=2))\n\")",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(curl:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

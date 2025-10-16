@@ -232,7 +232,13 @@
               <th>ID</th>
               <th>Job ID</th>
               <th>Competitor</th>
-              <th>Result JSON</th>
+              <th>Segment Text</th>
+              <th>Sentiment</th>
+              <th>Detection Method</th>
+              <th>Detection Details</th>
+              <th>Segment ID</th>
+              <th>Start Time</th>
+              <th>End Time</th>
               <th>Created At</th>
             </tr>
           </thead>
@@ -250,12 +256,15 @@
                   </button>
                 </td>
                 <td>{result.competitor_name}</td>
-                <td class="json-cell">
-                  <details>
-                    <summary>View JSON</summary>
-                    <pre>{JSON.stringify(result.result_json, null, 2)}</pre>
-                  </details>
+                <td class="segment-text-cell">{result.segment_text || '-'}</td>
+                <td>
+                  <span class="sentiment-badge {result.sentiment}">{result.sentiment}</span>
                 </td>
+                <td>{result.detection_method || '-'}</td>
+                <td class="detection-cell">{result.detection_details || '-'}</td>
+                <td class="mono">{result.segment_id || '-'}</td>
+                <td class="time-cell">{result.start_time || '-'}</td>
+                <td class="time-cell">{result.end_time || '-'}</td>
                 <td class="date-cell">{result.created_at || '-'}</td>
               </tr>
             {/each}
@@ -534,33 +543,50 @@
     white-space: nowrap;
   }
 
-  .json-cell {
+  .segment-text-cell {
     max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
   }
 
-  details {
-    cursor: pointer;
+  .detection-cell {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.8rem;
+    color: #6b7280;
   }
 
-  summary {
-    color: #2563eb;
-    font-weight: 500;
-    user-select: none;
+  .time-cell {
+    font-size: 0.8rem;
+    color: #6b7280;
+    white-space: nowrap;
   }
 
-  summary:hover {
-    text-decoration: underline;
-  }
-
-  pre {
-    background: #1f2937;
-    color: #10b981;
-    padding: 1rem;
-    border-radius: 6px;
-    overflow-x: auto;
+  .sentiment-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
     font-size: 0.75rem;
-    margin-top: 0.5rem;
-    max-height: 400px;
-    overflow-y: auto;
+    font-weight: 600;
+    text-transform: capitalize;
+  }
+
+  .sentiment-badge.positive {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .sentiment-badge.negative {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .sentiment-badge.neutral {
+    background: #f3f4f6;
+    color: #374151;
   }
 </style>
