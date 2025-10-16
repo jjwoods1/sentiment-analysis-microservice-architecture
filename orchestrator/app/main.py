@@ -464,6 +464,7 @@ async def get_competitor_analytics(
         - Sentiment breakdown
         - Percentage of each sentiment
         - Number of calls where mentioned
+        - All individual segment results
     """
     from sqlalchemy import func
 
@@ -498,11 +499,33 @@ async def get_competitor_analytics(
             "percentage": percentage
         })
 
+    # Get all individual segment results for this competitor
+    segments = db.query(models.SentimentResult).filter(
+        models.SentimentResult.competitor_name == competitor_name
+    ).order_by(models.SentimentResult.created_at.desc()).all()
+
+    # Convert to dict format
+    segments_data = []
+    for segment in segments:
+        segments_data.append({
+            "id": str(segment.id),
+            "job_id": str(segment.job_id),
+            "segment_text": segment.segment_text,
+            "sentiment": segment.sentiment,
+            "detection_method": segment.detection_method,
+            "detection_details": segment.detection_details,
+            "segment_id": segment.segment_id,
+            "start_time": segment.start_time,
+            "end_time": segment.end_time,
+            "created_at": segment.created_at.isoformat() if segment.created_at else None
+        })
+
     return {
         "competitor_name": competitor_name,
         "total_mentions": total_mentions,
         "unique_calls": unique_calls,
-        "sentiment_breakdown": sentiment_data
+        "sentiment_breakdown": sentiment_data,
+        "segments": segments_data
     }
 
 

@@ -239,6 +239,47 @@
           </div>
         {/each}
       </div>
+
+      <!-- All Individual Segments -->
+      {#if competitorDetails.segments && competitorDetails.segments.length > 0}
+        <h3 style="margin-top: 2rem;">All Mentions ({competitorDetails.segments.length})</h3>
+        <p style="color: var(--muted-color); margin-bottom: 1rem;">Individual segment results showing all mentions of {selectedCompetitor}</p>
+
+        <div class="segments-container">
+          {#each competitorDetails.segments as segment}
+            <div class="segment-card">
+              <div class="segment-header">
+                <mark class={getSentimentColor(segment.sentiment)}>
+                  {segment.sentiment}
+                </mark>
+                <span class="detection-method">
+                  {segment.detection_method === 'llm-based' ? 'LLM Based' : 'Rule Based'}
+                </span>
+              </div>
+
+              <blockquote class="segment-text">
+                "{segment.segment_text}"
+              </blockquote>
+
+              <div class="segment-meta">
+                {#if segment.start_time && segment.end_time}
+                  <small class="timestamp">
+                    {Math.floor(parseFloat(segment.start_time) / 60)}:{String(Math.floor(parseFloat(segment.start_time) % 60)).padStart(2, '0')}
+                    -
+                    {Math.floor(parseFloat(segment.end_time) / 60)}:{String(Math.floor(parseFloat(segment.end_time) % 60)).padStart(2, '0')}
+                  </small>
+                {/if}
+                {#if segment.detection_details}
+                  <small class="detection-details">{segment.detection_details}</small>
+                {/if}
+                <small class="job-id" title="Job ID: {segment.job_id}">
+                  Job: {segment.job_id.substring(0, 8)}...
+                </small>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
     {/if}
   </article>
 {/if}
@@ -345,5 +386,72 @@
 
   .progress-bar.info {
     background-color: var(--primary);
+  }
+
+  .segments-container {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .segment-card {
+    background-color: var(--card-background-color);
+    border: 1px solid var(--muted-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .segment-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .segment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .detection-method {
+    font-size: 0.875rem;
+    color: var(--muted-color);
+    background-color: var(--muted-border-color);
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+  }
+
+  .segment-text {
+    margin: 1rem 0;
+    padding-left: 1rem;
+    border-left: 3px solid var(--primary);
+    font-style: italic;
+    color: var(--color);
+  }
+
+  .segment-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .segment-meta small {
+    color: var(--muted-color);
+    font-size: 0.875rem;
+  }
+
+  .segment-meta .timestamp {
+    font-family: monospace;
+  }
+
+  .segment-meta .detection-details {
+    font-style: italic;
+  }
+
+  .segment-meta .job-id {
+    font-family: monospace;
+    cursor: help;
   }
 </style>
