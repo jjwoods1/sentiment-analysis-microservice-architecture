@@ -472,7 +472,7 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
                 "left_path": left_transcript_path,
                 "right_path": right_transcript_path,
                 "filename": filename,
-                "last_result": error_result
+                "last_result": {"error": str(e), "competitor": competitor_name}
             }
     finally:
         db.close()
