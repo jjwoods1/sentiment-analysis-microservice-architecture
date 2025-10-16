@@ -9,7 +9,22 @@ class SentimentResultSchema(BaseModel):
     id: UUID
     job_id: UUID
     competitor_name: str
-    result_json: dict
+
+    # Individual segment data
+    segment_text: str
+    sentiment: str
+    detection_method: str
+    detection_details: Optional[str] = None
+
+    # Segment metadata
+    segment_id: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+
+    # Additional metadata
+    context: Optional[str] = None
+    metadata_json: Optional[dict] = None
+
     created_at: datetime
 
     class Config:
@@ -33,6 +48,13 @@ class JobResponse(JobBase):
     left_transcript_path: Optional[str] = None
     right_transcript_path: Optional[str] = None
     competitors_found: Optional[List[str]] = None
+
+    # Progress tracking
+    current_step: Optional[str] = None
+    progress_percentage: Optional[str] = None
+    total_competitors: Optional[str] = None
+    completed_competitors: Optional[str] = None
+
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime] = None
