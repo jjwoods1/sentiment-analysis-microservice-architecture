@@ -18,10 +18,22 @@ depends_on = None
 
 def upgrade() -> None:
     # First, add progress tracking columns to jobs table if they don't exist
-    op.add_column('jobs', sa.Column('current_step', sa.String(), nullable=True))
-    op.add_column('jobs', sa.Column('progress_percentage', sa.String(), nullable=True))
-    op.add_column('jobs', sa.Column('total_competitors', sa.String(), nullable=True))
-    op.add_column('jobs', sa.Column('completed_competitors', sa.String(), nullable=True))
+    # Use raw SQL to conditionally add columns
+    from sqlalchemy import inspect
+    from alembic import context
+
+    conn = context.get_bind()
+    inspector = inspect(conn)
+    existing_columns = {col['name'] for col in inspector.get_columns('jobs')}
+
+    if 'current_step' not in existing_columns:
+        op.add_column('jobs', sa.Column('current_step', sa.String(), nullable=True))
+    if 'progress_percentage' not in existing_columns:
+        op.add_column('jobs', sa.Column('progress_percentage', sa.String(), nullable=True))
+    if 'total_competitors' not in existing_columns:
+        op.add_column('jobs', sa.Column('total_competitors', sa.String(), nullable=True))
+    if 'completed_competitors' not in existing_columns:
+        op.add_column('jobs', sa.Column('completed_competitors', sa.String(), nullable=True))
 
     # Drop the old sentiment_results table entirely and recreate with new schema
     # This is acceptable since we're changing the fundamental data structure
