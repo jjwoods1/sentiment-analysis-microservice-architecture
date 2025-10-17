@@ -85,7 +85,7 @@ services:
       AUTH_PASSWORD: ${AUTH_PASSWORD}
       SPLIT_URL: ${SPLIT_URL}
       TRANSCRIPTION_URL: ${TRANSCRIPTION_URL}
-      SENTIMENT_URL: ${SENTIMENT_URL}
+      SENTIMENT_URL: http://sentiment-api:8008
       ANALYSIS_URL: http://analysis-api:8001
       STORAGE_URL: http://storage-api:8002
       NOTIFICATION_URL: http://notification-api:8003
@@ -104,6 +104,8 @@ services:
       analysis-api:
         condition: service_healthy
       notification-api:
+        condition: service_healthy
+      sentiment-api:
         condition: service_healthy
     networks:
       - audio-network
@@ -136,7 +138,7 @@ services:
       AUTH_PASSWORD: ${AUTH_PASSWORD}
       SPLIT_URL: ${SPLIT_URL}
       TRANSCRIPTION_URL: ${TRANSCRIPTION_URL}
-      SENTIMENT_URL: ${SENTIMENT_URL}
+      SENTIMENT_URL: http://sentiment-api:8008
       ANALYSIS_URL: http://analysis-api:8001
       STORAGE_URL: http://storage-api:8002
       NOTIFICATION_URL: http://notification-api:8003
@@ -150,6 +152,8 @@ services:
       storage-api:
         condition: service_healthy
       notification-api:
+        condition: service_healthy
+      sentiment-api:
         condition: service_healthy
       orchestrator-api:
         condition: service_healthy
@@ -184,7 +188,7 @@ services:
       AUTH_PASSWORD: ${AUTH_PASSWORD}
       SPLIT_URL: ${SPLIT_URL}
       TRANSCRIPTION_URL: ${TRANSCRIPTION_URL}
-      SENTIMENT_URL: ${SENTIMENT_URL}
+      SENTIMENT_URL: http://sentiment-api:8008
       ANALYSIS_URL: http://analysis-api:8001
       STORAGE_URL: http://storage-api:8002
       NOTIFICATION_URL: http://notification-api:8003
@@ -290,6 +294,35 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+
+  sentiment-api:
+    build:
+      context: ./sentiment-analysis-tool-V1
+      dockerfile: Dockerfile
+    container_name: audio-sentiment-api
+    environment:
+      PYTHONUNBUFFERED: "1"
+      HOST: "0.0.0.0"
+      PORT: "8008"
+    ports:
+      - "8008:8008"
+    networks:
+      - audio-network
+    volumes:
+      # Mount models directory for persistence (models are ~7GB+)
+      - ./sentiment-analysis-tool-V1/models:/app/.models
+      # Mount pattern files for live updates without restart
+      - ./sentiment-analysis-tool-V1/positive_patterns.txt:/app/positive_patterns.txt
+      - ./sentiment-analysis-tool-V1/negative_patterns.txt:/app/negative_patterns.txt
+      # Mount LLM fallback log for persistence
+      - ./sentiment-analysis-tool-V1/llm_fallback_segments.txt:/app/llm_fallback_segments.txt
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
 
   frontend:
     build:
