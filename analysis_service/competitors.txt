@@ -4,7 +4,6 @@ CMLink
 CTExcel
 Ecotalk
 giffgaff
-Honest
 ID
 Lebara
 Lyca

@@ -317,6 +317,11 @@ def analyze_contextual_sentiment(file_path: str, context: str) -> Dict[str, Any]
 
     for segment in segments:
         segment_text = segment.get("text", "")
+        # Skip segments with only one word (single-word segments are too short for sentiment analysis)
+        word_count = len(segment_text.split())
+        if word_count <= 1:
+            logger.debug(f"Skipping single-word segment {segment.get('id')}: '{segment_text}'")
+            continue
         if context_pattern.search(segment_text):
             context_segments.append(segment)
     
