@@ -2,6 +2,7 @@ import { browser } from '$app/environment';
 
 // API URL - configure this to match your server
 const API_URL = 'http://10.1.0.35:8100';
+const SENTIMENT_API_URL = 'http://10.1.0.35:8008';
 
 /**
  * Upload an audio file for processing
@@ -190,6 +191,164 @@ export async function getStorageFiles() {
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || 'Failed to fetch storage files');
+  }
+
+  return await response.json();
+}
+
+// ---------------------------
+// Sentiment Pattern Management
+// ---------------------------
+
+/**
+ * Get positive sentiment patterns
+ * @returns {Promise<{patterns: Array<string>, count: number}>}
+ */
+export async function getPositivePatterns() {
+  const response = await fetch(`${SENTIMENT_API_URL}/patterns/positive`);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to fetch positive patterns');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Get negative sentiment patterns
+ * @returns {Promise<{patterns: Array<string>, count: number}>}
+ */
+export async function getNegativePatterns() {
+  const response = await fetch(`${SENTIMENT_API_URL}/patterns/negative`);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to fetch negative patterns');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Add a positive sentiment pattern
+ * @param {string} pattern - The pattern to add
+ * @returns {Promise<{patterns: Array<string>, count: number}>}
+ */
+export async function addPositivePattern(pattern) {
+  const response = await fetch(`${SENTIMENT_API_URL}/patterns/positive`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ pattern })
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to add positive pattern');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Add a negative sentiment pattern
+ * @param {string} pattern - The pattern to add
+ * @returns {Promise<{patterns: Array<string>, count: number}>}
+ */
+export async function addNegativePattern(pattern) {
+  const response = await fetch(`${SENTIMENT_API_URL}/patterns/negative`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ pattern })
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to add negative pattern');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Replace all positive patterns
+ * @param {Array<string>} patterns - List of patterns to set
+ * @returns {Promise<{patterns: Array<string>, count: number}>}
+ */
+export async function replacePositivePatterns(patterns) {
+  const response = await fetch(`${SENTIMENT_API_URL}/patterns/positive`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ patterns })
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to replace positive patterns');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Replace all negative patterns
+ * @param {Array<string>} patterns - List of patterns to set
+ * @returns {Promise<{patterns: Array<string>, count: number}>}
+ */
+export async function replaceNegativePatterns(patterns) {
+  const response = await fetch(`${SENTIMENT_API_URL}/patterns/negative`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ patterns })
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to replace negative patterns');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Delete a positive sentiment pattern
+ * @param {string} pattern - The pattern to delete
+ * @returns {Promise<Object>}
+ */
+export async function deletePositivePattern(pattern) {
+  const response = await fetch(`${SENTIMENT_API_URL}/patterns/positive/${encodeURIComponent(pattern)}`, {
+    method: 'DELETE'
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to delete positive pattern');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Delete a negative sentiment pattern
+ * @param {string} pattern - The pattern to delete
+ * @returns {Promise<Object>}
+ */
+export async function deleteNegativePattern(pattern) {
+  const response = await fetch(`${SENTIMENT_API_URL}/patterns/negative/${encodeURIComponent(pattern)}`, {
+    method: 'DELETE'
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to delete negative pattern');
   }
 
   return await response.json();
