@@ -101,8 +101,8 @@
       // Remove leading slash if present (MinIO paths don't have leading slash)
       const cleanPath = transcriptPath.startsWith('/') ? transcriptPath.substring(1) : transcriptPath;
 
-      // Fetch from storage API
-      const response = await fetch(`http://10.1.0.35:8002/download/${cleanPath}`);
+      // Fetch from orchestrator API (which proxies to storage service)
+      const response = await fetch(`http://10.1.0.35:8100/admin/storage/download/${cleanPath}`);
 
       if (!response.ok) {
         throw new Error(`Download failed: ${response.statusText}`);

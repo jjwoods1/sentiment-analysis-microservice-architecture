@@ -758,6 +758,33 @@ async def get_storage_files():
         )
 
 
+@app.get("/admin/storage/download/{object_path:path}")
+async def download_transcript(object_path: str):
+    """
+    Download a transcript file from MinIO storage via storage service proxy.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{settings.STORAGE_URL}/download/{object_path}")
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Transcript not found: {object_path}"
+            )
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Storage service error: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to download transcript: {str(e)}"
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
