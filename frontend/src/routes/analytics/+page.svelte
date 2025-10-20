@@ -11,7 +11,20 @@
   let detailsLoading = false;
   let detailsError = '';
 
+  // Date range filtering
+  let startDate = '';
+  let endDate = '';
+  let showDateFilter = false;
+
   onMount(async () => {
+    // Set default date range to last 30 days
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+
+    endDate = today.toISOString().split('T')[0];
+    startDate = thirtyDaysAgo.toISOString().split('T')[0];
+
     await loadAnalytics();
   });
 
@@ -20,14 +33,28 @@
       loading = true;
       error = '';
 
+      // Build query parameters for date filtering
+      const params = {};
+      if (showDateFilter && startDate) {
+        params.start_date = startDate;
+      }
+      if (showDateFilter && endDate) {
+        params.end_date = endDate;
+      }
+
       // Load overview and competitors list in parallel
       const [overviewData, competitorsData] = await Promise.all([
-        getAnalyticsOverview(),
-        getAllCompetitors()
+        getAnalyticsOverview(params),
+        getAllCompetitors(params)
       ]);
 
       overview = overviewData;
       competitors = competitorsData.competitors;
+
+      // Reload competitor details if one is selected
+      if (selectedCompetitor) {
+        await selectCompetitor(selectedCompetitor);
+      }
     } catch (e) {
       error = e.message;
     } finally {
@@ -41,7 +68,16 @@
     detailsError = '';
 
     try {
-      competitorDetails = await getCompetitorAnalytics(competitorName);
+      // Build query parameters for date filtering
+      const params = {};
+      if (showDateFilter && startDate) {
+        params.start_date = startDate;
+      }
+      if (showDateFilter && endDate) {
+        params.end_date = endDate;
+      }
+
+      competitorDetails = await getCompetitorAnalytics(competitorName, params);
     } catch (e) {
       detailsError = e.message;
     } finally {
@@ -52,6 +88,29 @@
   function clearSelection() {
     selectedCompetitor = null;
     competitorDetails = null;
+  }
+
+  function toggleDateFilter() {
+    showDateFilter = !showDateFilter;
+    if (!showDateFilter) {
+      // Clear date filters and reload
+      loadAnalytics();
+    }
+  }
+
+  function applyDateFilter() {
+    loadAnalytics();
+  }
+
+  function setPresetRange(days) {
+    const today = new Date();
+    const pastDate = new Date(today);
+    pastDate.setDate(today.getDate() - days);
+
+    endDate = today.toISOString().split('T')[0];
+    startDate = pastDate.toISOString().split('T')[0];
+    showDateFilter = true;
+    loadAnalytics();
   }
 </script>
 
@@ -69,10 +128,64 @@
 <article>
   <header>
     <h1>Analytics Dashboard</h1>
-    <button on:click={loadAnalytics} class="secondary" disabled={loading}>
-      Refresh
-    </button>
+    <div style="display: flex; gap: 0.5rem;">
+      <button on:click={toggleDateFilter} class="secondary outline">
+        {showDateFilter ? 'Hide' : 'Show'} Date Filter
+      </button>
+      <button on:click={loadAnalytics} class="secondary" disabled={loading}>
+        Refresh
+      </button>
+    </div>
   </header>
+
+  <!-- Date Range Filter -->
+  {#if showDateFilter}
+    <div class="date-filter-container">
+      <h3>Filter by Date Range</h3>
+
+      <!-- Quick Preset Buttons -->
+      <div class="preset-buttons">
+        <button on:click={() => setPresetRange(7)} class="secondary outline">Last 7 Days</button>
+        <button on:click={() => setPresetRange(30)} class="secondary outline">Last 30 Days</button>
+        <button on:click={() => setPresetRange(90)} class="secondary outline">Last 90 Days</button>
+        <button on:click={() => setPresetRange(365)} class="secondary outline">Last Year</button>
+      </div>
+
+      <!-- Custom Date Range -->
+      <div class="date-inputs">
+        <div class="date-input-group">
+          <label for="start-date">Start Date</label>
+          <input
+            type="date"
+            id="start-date"
+            bind:value={startDate}
+            max={endDate}
+          />
+        </div>
+
+        <div class="date-input-group">
+          <label for="end-date">End Date</label>
+          <input
+            type="date"
+            id="end-date"
+            bind:value={endDate}
+            min={startDate}
+            max={new Date().toISOString().split('T')[0]}
+          />
+        </div>
+
+        <button on:click={applyDateFilter} disabled={loading || !startDate || !endDate}>
+          Apply Filter
+        </button>
+      </div>
+
+      {#if startDate && endDate}
+        <p style="text-align: center; color: var(--muted-color); margin-top: 0.5rem;">
+          Showing data from <strong>{new Date(startDate).toLocaleDateString()}</strong> to <strong>{new Date(endDate).toLocaleDateString()}</strong>
+        </p>
+      {/if}
+    </div>
+  {/if}
 
   {#if loading}
     <p aria-busy="true">Loading analytics...</p>
@@ -285,6 +398,62 @@
 {/if}
 
 <style>
+  .date-filter-container {
+    background-color: var(--card-background-color);
+    border: 1px solid var(--muted-border-color);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .date-filter-container h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    text-align: center;
+  }
+
+  .preset-buttons {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+
+  .preset-buttons button {
+    margin: 0;
+    padding: 0.5rem 1rem;
+  }
+
+  .date-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 1rem;
+    align-items: end;
+  }
+
+  .date-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .date-input-group label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color);
+  }
+
+  .date-inputs button {
+    margin: 0;
+  }
+
+  @media (max-width: 768px) {
+    .date-inputs {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));

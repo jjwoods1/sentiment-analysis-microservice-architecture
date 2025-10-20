@@ -403,7 +403,11 @@ async def get_job(
 
 
 @app.get("/analytics/overview")
-async def get_analytics_overview(db: Session = Depends(get_db)):
+async def get_analytics_overview(
+    start_date: str = Query(None, description="Start date filter (YYYY-MM-DD)"),
+    end_date: str = Query(None, description="End date filter (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
     """
     Get overall analytics overview.
 
@@ -412,32 +416,67 @@ async def get_analytics_overview(db: Session = Depends(get_db)):
         - Total competitors found
         - Top competitors
         - Sentiment distribution
+
+    Query Parameters:
+        - start_date: Filter results from this date (inclusive)
+        - end_date: Filter results until this date (inclusive)
     """
     from sqlalchemy import func, case
+    from datetime import datetime as dt
+
+    # Build date filters
+    job_filters = [models.Job.status == models.JobStatus.COMPLETED]
+    sentiment_filters = []
+
+    if start_date:
+        try:
+            start_dt = dt.fromisoformat(start_date)
+            job_filters.append(models.Job.created_at >= start_dt)
+            sentiment_filters.append(models.SentimentResult.created_at >= start_dt)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD")
+
+    if end_date:
+        try:
+            end_dt = dt.fromisoformat(end_date)
+            # Add one day to include the entire end date
+            from datetime import timedelta
+            end_dt = end_dt + timedelta(days=1)
+            job_filters.append(models.Job.created_at < end_dt)
+            sentiment_filters.append(models.SentimentResult.created_at < end_dt)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD")
 
     # Total jobs
-    total_jobs = db.query(func.count(models.Job.id)).filter(
-        models.Job.status == models.JobStatus.COMPLETED
-    ).scalar() or 0
+    total_jobs = db.query(func.count(models.Job.id)).filter(*job_filters).scalar() or 0
 
-    # Total unique competitors mentioned
-    total_competitors = db.query(func.count(func.distinct(models.SentimentResult.competitor_name))).scalar() or 0
+    # Total unique competitors mentioned (with date filter)
+    query = db.query(func.count(func.distinct(models.SentimentResult.competitor_name)))
+    if sentiment_filters:
+        query = query.filter(*sentiment_filters)
+    total_competitors = query.scalar() or 0
 
-    # Top 10 mentioned competitors
-    top_competitors = db.query(
+    # Top 10 mentioned competitors (with date filter)
+    query = db.query(
         models.SentimentResult.competitor_name,
         func.count(models.SentimentResult.id).label('mention_count')
-    ).group_by(
+    )
+    if sentiment_filters:
+        query = query.filter(*sentiment_filters)
+    top_competitors = query.group_by(
         models.SentimentResult.competitor_name
     ).order_by(
         func.count(models.SentimentResult.id).desc()
     ).limit(10).all()
 
-    # Overall sentiment distribution (now using direct sentiment column)
-    sentiment_distribution = db.query(
+    # Overall sentiment distribution (with date filter)
+    query = db.query(
         models.SentimentResult.sentiment,
         func.count(models.SentimentResult.id).label('count')
-    ).group_by(models.SentimentResult.sentiment).all()
+    )
+    if sentiment_filters:
+        query = query.filter(*sentiment_filters)
+    sentiment_distribution = query.group_by(models.SentimentResult.sentiment).all()
 
     return {
         "total_jobs": total_jobs,
@@ -454,6 +493,8 @@ async def get_analytics_overview(db: Session = Depends(get_db)):
 @app.get("/analytics/competitor/{competitor_name}")
 async def get_competitor_analytics(
     competitor_name: str,
+    start_date: str = Query(None, description="Start date filter (YYYY-MM-DD)"),
+    end_date: str = Query(None, description="End date filter (YYYY-MM-DD)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -465,13 +506,36 @@ async def get_competitor_analytics(
         - Percentage of each sentiment
         - Number of calls where mentioned
         - All individual segment results
+
+    Query Parameters:
+        - start_date: Filter results from this date (inclusive)
+        - end_date: Filter results until this date (inclusive)
     """
     from sqlalchemy import func
+    from datetime import datetime as dt
+
+    # Build date filters
+    filters = [models.SentimentResult.competitor_name == competitor_name]
+
+    if start_date:
+        try:
+            start_dt = dt.fromisoformat(start_date)
+            filters.append(models.SentimentResult.created_at >= start_dt)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD")
+
+    if end_date:
+        try:
+            end_dt = dt.fromisoformat(end_date)
+            # Add one day to include the entire end date
+            from datetime import timedelta
+            end_dt = end_dt + timedelta(days=1)
+            filters.append(models.SentimentResult.created_at < end_dt)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD")
 
     # Total mentions
-    total_mentions = db.query(func.count(models.SentimentResult.id)).filter(
-        models.SentimentResult.competitor_name == competitor_name
-    ).scalar() or 0
+    total_mentions = db.query(func.count(models.SentimentResult.id)).filter(*filters).scalar() or 0
 
     if total_mentions == 0:
         raise HTTPException(status_code=404, detail=f"No data found for competitor: {competitor_name}")
@@ -480,14 +544,10 @@ async def get_competitor_analytics(
     sentiment_breakdown = db.query(
         models.SentimentResult.sentiment,
         func.count(models.SentimentResult.id).label('count')
-    ).filter(
-        models.SentimentResult.competitor_name == competitor_name
-    ).group_by(models.SentimentResult.sentiment).all()
+    ).filter(*filters).group_by(models.SentimentResult.sentiment).all()
 
     # Number of unique calls
-    unique_calls = db.query(func.count(func.distinct(models.SentimentResult.job_id))).filter(
-        models.SentimentResult.competitor_name == competitor_name
-    ).scalar() or 0
+    unique_calls = db.query(func.count(func.distinct(models.SentimentResult.job_id))).filter(*filters).scalar() or 0
 
     # Calculate percentages
     sentiment_data = []
@@ -500,9 +560,7 @@ async def get_competitor_analytics(
         })
 
     # Get all individual segment results for this competitor
-    segments = db.query(models.SentimentResult).filter(
-        models.SentimentResult.competitor_name == competitor_name
-    ).order_by(models.SentimentResult.created_at.desc()).all()
+    segments = db.query(models.SentimentResult).filter(*filters).order_by(models.SentimentResult.created_at.desc()).all()
 
     # Convert to dict format
     segments_data = []
@@ -530,16 +588,50 @@ async def get_competitor_analytics(
 
 
 @app.get("/analytics/competitors/list")
-async def get_all_competitors(db: Session = Depends(get_db)):
+async def get_all_competitors(
+    start_date: str = Query(None, description="Start date filter (YYYY-MM-DD)"),
+    end_date: str = Query(None, description="End date filter (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
     """
     Get list of all competitors that have been mentioned.
+
+    Query Parameters:
+        - start_date: Filter results from this date (inclusive)
+        - end_date: Filter results until this date (inclusive)
     """
     from sqlalchemy import func
+    from datetime import datetime as dt
 
-    competitors = db.query(
+    # Build date filters
+    filters = []
+
+    if start_date:
+        try:
+            start_dt = dt.fromisoformat(start_date)
+            filters.append(models.SentimentResult.created_at >= start_dt)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD")
+
+    if end_date:
+        try:
+            end_dt = dt.fromisoformat(end_date)
+            # Add one day to include the entire end date
+            from datetime import timedelta
+            end_dt = end_dt + timedelta(days=1)
+            filters.append(models.SentimentResult.created_at < end_dt)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD")
+
+    query = db.query(
         models.SentimentResult.competitor_name,
         func.count(models.SentimentResult.id).label('mention_count')
-    ).group_by(
+    )
+
+    if filters:
+        query = query.filter(*filters)
+
+    competitors = query.group_by(
         models.SentimentResult.competitor_name
     ).order_by(
         models.SentimentResult.competitor_name

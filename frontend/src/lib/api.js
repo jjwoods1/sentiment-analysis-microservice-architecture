@@ -91,10 +91,13 @@ export function getStatusColor(status) {
 
 /**
  * Get analytics overview
+ * @param {Object} params - Query parameters (start_date, end_date)
  * @returns {Promise<Object>}
  */
-export async function getAnalyticsOverview() {
-  const response = await fetch(`${API_URL}/analytics/overview`);
+export async function getAnalyticsOverview(params = {}) {
+  const queryString = new URLSearchParams(params).toString();
+  const url = queryString ? `${API_URL}/analytics/overview?${queryString}` : `${API_URL}/analytics/overview`;
+  const response = await fetch(url);
 
   if (!response.ok) {
     const error = await response.json();
@@ -107,10 +110,15 @@ export async function getAnalyticsOverview() {
 /**
  * Get competitor-specific analytics
  * @param {string} competitorName - The competitor name
+ * @param {Object} params - Query parameters (start_date, end_date)
  * @returns {Promise<Object>}
  */
-export async function getCompetitorAnalytics(competitorName) {
-  const response = await fetch(`${API_URL}/analytics/competitor/${encodeURIComponent(competitorName)}`);
+export async function getCompetitorAnalytics(competitorName, params = {}) {
+  const queryString = new URLSearchParams(params).toString();
+  const url = queryString
+    ? `${API_URL}/analytics/competitor/${encodeURIComponent(competitorName)}?${queryString}`
+    : `${API_URL}/analytics/competitor/${encodeURIComponent(competitorName)}`;
+  const response = await fetch(url);
 
   if (!response.ok) {
     const error = await response.json();
@@ -122,10 +130,13 @@ export async function getCompetitorAnalytics(competitorName) {
 
 /**
  * Get list of all competitors
+ * @param {Object} params - Query parameters (start_date, end_date)
  * @returns {Promise<{competitors: Array}>}
  */
-export async function getAllCompetitors() {
-  const response = await fetch(`${API_URL}/analytics/competitors/list`);
+export async function getAllCompetitors(params = {}) {
+  const queryString = new URLSearchParams(params).toString();
+  const url = queryString ? `${API_URL}/analytics/competitors/list?${queryString}` : `${API_URL}/analytics/competitors/list`;
+  const response = await fetch(url);
 
   if (!response.ok) {
     const error = await response.json();
