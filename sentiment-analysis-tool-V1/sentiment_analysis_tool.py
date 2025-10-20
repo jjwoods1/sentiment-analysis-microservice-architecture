@@ -116,7 +116,7 @@ def detect_sentiment_keywords(text: str, context: str) -> tuple[Optional[str], O
         context: The context word to focus on
 
     Returns:
-        Tuple of (sentiment, matched_pattern) where sentiment is "positive", "negative", or None
+        Tuple of (sentiment, matched_pattern) where sentiment is "positive", "negative", "neutral", or None
         and matched_pattern is the pattern that was matched, or None
     """
     text_lower = text.lower()
@@ -411,7 +411,10 @@ def analyze_contextual_sentiment(file_path: str, context: str) -> Dict[str, Any]
 Rules:
 - Only sentiment about "{context}" matters
 - Handle negation (e.g., "not good" = negative)
-- Questions = neutral
+- Questions, factual statements, introductions, and identification statements = neutral
+- Factual examples: "calling from {context}", "this is {context}", "speaking from {context}", "representative from {context}" = neutral
+- Only emotional or evaluative statements about {context} can be positive or negative
+- If there is no emotional opinion expressed about {context}, classify as neutral
 - Mixed sentiment = use the stronger one
 
 Respond ONLY with valid JSON in this exact format:
