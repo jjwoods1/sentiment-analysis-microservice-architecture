@@ -94,6 +94,39 @@
     alert('Copied to clipboard!');
   }
 
+  async function downloadTranscript(transcriptPath) {
+    if (!transcriptPath) return;
+
+    try {
+      // Remove leading slash if present (MinIO paths don't have leading slash)
+      const cleanPath = transcriptPath.startsWith('/') ? transcriptPath.substring(1) : transcriptPath;
+
+      // Fetch from storage API
+      const response = await fetch(`http://10.1.0.35:8002/download/${cleanPath}`);
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success || !result.data) {
+        throw new Error(result.message || 'Download failed');
+      }
+
+      // Create blob and download
+      const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = cleanPath.split('/').pop() || 'transcript.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Failed to download transcript: ${err.message}`);
+    }
+  }
+
   $: filteredJobs = jobsData ? filterRows(jobsData.rows, searchTerm) : [];
   $: filteredSentiment = sentimentData ? filterRows(sentimentData.rows, searchTerm) : [];
   $: filteredStorage = storageData ? filterRows(storageData.objects || [], searchTerm) : [];
@@ -225,10 +258,10 @@
                 </td>
                 <td class="path-cell">
                   {#if job.left_transcript_path}
-                    <a href={job.left_transcript_path} target="_blank" rel="noopener noreferrer" class="download-link transcript-link" title="Download left transcript" download>
+                    <button on:click={() => downloadTranscript(job.left_transcript_path)} class="download-link transcript-link" title="Download left transcript">
                       📄 {job.left_transcript_path.split('/').pop() || 'Download'}
-                    </a>
-                    <button on:click={() => copyToClipboard(job.left_transcript_path)} class="copy-btn-small" title="Copy URL">
+                    </button>
+                    <button on:click={() => copyToClipboard(job.left_transcript_path)} class="copy-btn-small" title="Copy path">
                       📋
                     </button>
                   {:else}
@@ -237,10 +270,10 @@
                 </td>
                 <td class="path-cell">
                   {#if job.right_transcript_path}
-                    <a href={job.right_transcript_path} target="_blank" rel="noopener noreferrer" class="download-link transcript-link" title="Download right transcript" download>
+                    <button on:click={() => downloadTranscript(job.right_transcript_path)} class="download-link transcript-link" title="Download right transcript">
                       📄 {job.right_transcript_path.split('/').pop() || 'Download'}
-                    </a>
-                    <button on:click={() => copyToClipboard(job.right_transcript_path)} class="copy-btn-small" title="Copy URL">
+                    </button>
+                    <button on:click={() => copyToClipboard(job.right_transcript_path)} class="copy-btn-small" title="Copy path">
                       📋
                     </button>
                   {:else}
@@ -581,6 +614,11 @@
     font-weight: 500;
     transition: all 0.2s;
     cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
   }
 
   .download-link:hover {
