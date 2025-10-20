@@ -13,6 +13,7 @@ from typing import Dict, List, Any, Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import uvicorn
@@ -113,6 +114,15 @@ app = FastAPI(
     description="Advanced sentiment analysis using DistilBERT, RoBERTa, and Llama 2 models",
     version="1.0.0",
     lifespan=lifespan
+)
+
+# Add CORS middleware to allow frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3200", "http://10.1.0.35:3200", "http://localhost:3000", "http://10.1.0.35:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.get("/", response_model=HealthResponse)
