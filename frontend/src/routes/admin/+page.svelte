@@ -205,10 +205,48 @@
                   <span class="status-badge {job.status.toLowerCase()}">{job.status}</span>
                 </td>
                 <td class="error-cell">{job.error_message || '-'}</td>
-                <td class="url-cell">{job.left_channel_url || '-'}</td>
-                <td class="url-cell">{job.right_channel_url || '-'}</td>
-                <td class="path-cell">{job.left_transcript_path || '-'}</td>
-                <td class="path-cell">{job.right_transcript_path || '-'}</td>
+                <td class="url-cell">
+                  {#if job.left_channel_url}
+                    <a href={job.left_channel_url} target="_blank" rel="noopener noreferrer" class="download-link" title="Open left channel audio">
+                      {job.left_channel_url.split('/').pop() || job.left_channel_url}
+                    </a>
+                  {:else}
+                    -
+                  {/if}
+                </td>
+                <td class="url-cell">
+                  {#if job.right_channel_url}
+                    <a href={job.right_channel_url} target="_blank" rel="noopener noreferrer" class="download-link" title="Open right channel audio">
+                      {job.right_channel_url.split('/').pop() || job.right_channel_url}
+                    </a>
+                  {:else}
+                    -
+                  {/if}
+                </td>
+                <td class="path-cell">
+                  {#if job.left_transcript_path}
+                    <a href={job.left_transcript_path} target="_blank" rel="noopener noreferrer" class="download-link transcript-link" title="Download left transcript" download>
+                      📄 {job.left_transcript_path.split('/').pop() || 'Download'}
+                    </a>
+                    <button on:click={() => copyToClipboard(job.left_transcript_path)} class="copy-btn-small" title="Copy URL">
+                      📋
+                    </button>
+                  {:else}
+                    -
+                  {/if}
+                </td>
+                <td class="path-cell">
+                  {#if job.right_transcript_path}
+                    <a href={job.right_transcript_path} target="_blank" rel="noopener noreferrer" class="download-link transcript-link" title="Download right transcript" download>
+                      📄 {job.right_transcript_path.split('/').pop() || 'Download'}
+                    </a>
+                    <button on:click={() => copyToClipboard(job.right_transcript_path)} class="copy-btn-small" title="Copy URL">
+                      📋
+                    </button>
+                  {:else}
+                    -
+                  {/if}
+                </td>
                 <td>{job.competitors_found ? job.competitors_found.join(', ') : '-'}</td>
                 <td class="date-cell">{job.created_at || '-'}</td>
                 <td class="date-cell">{job.updated_at || '-'}</td>
@@ -535,6 +573,40 @@
     font-family: 'Courier New', monospace;
     font-size: 0.75rem;
     color: #6b7280;
+  }
+
+  .download-link {
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .download-link:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+  }
+
+  .transcript-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .copy-btn-small {
+    background: transparent;
+    border: none;
+    padding: 0.125rem 0.25rem;
+    margin-left: 0.25rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+
+  .copy-btn-small:hover {
+    opacity: 1;
   }
 
   .date-cell {
