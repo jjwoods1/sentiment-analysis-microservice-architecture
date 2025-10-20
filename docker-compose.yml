@@ -304,6 +304,9 @@ services:
       PYTHONUNBUFFERED: "1"
       HOST: "0.0.0.0"
       PORT: "8008"
+      SENTIMENT_MODEL: ${SENTIMENT_MODEL:-llama}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL_NAME: ${OPENAI_MODEL_NAME:-gpt-4o-mini}
     ports:
       - "8008:8008"
     networks:

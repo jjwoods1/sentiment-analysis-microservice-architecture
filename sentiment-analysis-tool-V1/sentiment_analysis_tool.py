@@ -40,15 +40,25 @@ NEGATIVE_PATTERNS_FILE = BASE_DIR / "negative_patterns.txt"
 POSITIVE_PATTERNS_FILE = BASE_DIR / "positive_patterns.txt"
 LLM_FALLBACK_LOG = BASE_DIR / "llm_fallback_segments.txt"
 
+# Model selection - can be "llama" or "openai"
+SENTIMENT_MODEL = os.getenv("SENTIMENT_MODEL", "llama").lower()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini")
+
 # ---------------------------
 # Imports - ML/AI dependencies
 # ---------------------------
 try:
     import torch
     from transformers import pipeline, AutoTokenizer
-    from llama_cpp import Llama
     from tqdm import tqdm
     import requests
+
+    # Conditional imports based on selected model
+    if SENTIMENT_MODEL == "llama":
+        from llama_cpp import Llama
+    elif SENTIMENT_MODEL == "openai":
+        from openai import OpenAI
 except ImportError as e:
     logger.error(f"Missing required dependency: {e}")
     logger.error("Please install dependencies using: pip install -r requirements.txt")
@@ -197,6 +207,169 @@ def load_file(file_path: str) -> Dict[str, Any]:
         logger.error(f"Error loading file {file_path}: {e}")
         sys.exit(1)
 
+def analyze_sentiment_with_openai(segment_text: str, context: str) -> tuple[str, str]:
+    """
+    Analyze sentiment using OpenAI API.
+
+    Args:
+        segment_text: The text segment to analyze
+        context: The context word to focus on
+
+    Returns:
+        Tuple of (sentiment, details) where sentiment is "positive", "negative", or "neutral"
+    """
+    if not OPENAI_API_KEY:
+        logger.error("OPENAI_API_KEY environment variable not set")
+        return "neutral", "Error: No API key provided"
+
+    try:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+
+        prompt = f"""Analyze sentiment about "{context}" in this text: "{segment_text}"
+
+Rules:
+- Only sentiment about "{context}" matters
+- Handle negation (e.g., "not good" = negative)
+- Questions, factual statements, introductions, and identification statements = neutral
+- Factual examples: "calling from {context}", "this is {context}", "speaking from {context}", "representative from {context}" = neutral
+- Only emotional or evaluative statements about {context} can be positive or negative
+- If there is no emotional opinion expressed about {context}, classify as neutral
+- Mixed sentiment = use the stronger one
+
+Respond ONLY with valid JSON in this exact format:
+{{"sentiment": "positive"}} OR {{"sentiment": "negative"}} OR {{"sentiment": "neutral"}}"""
+
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL_NAME,
+            messages=[
+                {"role": "system", "content": "You are a sentiment analysis assistant. Always respond with valid JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=50
+        )
+
+        response_text = response.choices[0].message.content.strip()
+
+        # Parse the JSON response
+        sentiment = None
+
+        # Strategy 1: Try to parse as JSON
+        try:
+            parsed = json.loads(response_text)
+            if "sentiment" in parsed:
+                sentiment = parsed["sentiment"].lower()
+        except json.JSONDecodeError:
+            # Strategy 2: Look for sentiment value in quotes
+            value_match = re.search(r'"sentiment"\s*:\s*"(positive|negative|neutral)"', response_text, re.IGNORECASE)
+            if value_match:
+                sentiment = value_match.group(1).lower()
+            else:
+                # Strategy 3: Look for just the sentiment word
+                word_match = re.search(r'\b(positive|negative|neutral)\b', response_text, re.IGNORECASE)
+                if word_match:
+                    sentiment = word_match.group(1).lower()
+
+        if sentiment and sentiment in ["positive", "negative", "neutral"]:
+            return sentiment, f"Model: {OPENAI_MODEL_NAME}"
+        else:
+            logger.warning(f"Invalid OpenAI response: {response_text}")
+            return "neutral", f"Failed to parse OpenAI response, defaulted to neutral"
+
+    except Exception as e:
+        logger.error(f"OpenAI API error: {e}")
+        return "neutral", f"API error: {str(e)}"
+
+def analyze_sentiment_with_llama(segment_text: str, context: str, llm) -> tuple[str, str]:
+    """
+    Analyze sentiment using local Llama model.
+
+    Args:
+        segment_text: The text segment to analyze
+        context: The context word to focus on
+        llm: The loaded Llama model instance
+
+    Returns:
+        Tuple of (sentiment, details) where sentiment is "positive", "negative", or "neutral"
+    """
+    class DevNull:
+        def write(self, msg): pass
+        def flush(self): pass
+
+    prompt = f"""Analyze sentiment about "{context}" in this text: "{segment_text}"
+
+Rules:
+- Only sentiment about "{context}" matters
+- Handle negation (e.g., "not good" = negative)
+- Questions, factual statements, introductions, and identification statements = neutral
+- Factual examples: "calling from {context}", "this is {context}", "speaking from {context}", "representative from {context}" = neutral
+- Only emotional or evaluative statements about {context} can be positive or negative
+- If there is no emotional opinion expressed about {context}, classify as neutral
+- Mixed sentiment = use the stronger one
+
+Respond ONLY with valid JSON in this exact format:
+{{"sentiment": "positive"}} OR {{"sentiment": "negative"}} OR {{"sentiment": "neutral"}}
+
+JSON response:"""
+
+    try:
+        _stdout, _stderr = sys.stdout, sys.stderr
+        sys.stdout = sys.stderr = DevNull()
+        response = llm(
+            prompt,
+            max_tokens=120,
+            temperature=0.1,
+            top_p=0.9,
+            stop=["\n\n", "Explanation:", "Note:"],
+            repeat_penalty=1.1
+        )
+    finally:
+        sys.stdout, sys.stderr = _stdout, _stderr
+
+    # Parse JSON response
+    try:
+        llm_response_text = response['choices'][0]['text'].strip()
+        sentiment = None
+
+        # Strategy 1: Try to find ANY JSON object with sentiment key
+        json_matches = re.finditer(r'\{[^}]*\}', llm_response_text)
+        for match in json_matches:
+            try:
+                potential_json = match.group(0)
+                parsed = json.loads(potential_json)
+                if "sentiment" in parsed:
+                    sentiment = parsed["sentiment"].lower()
+                    logger.info(f"✓ Extracted JSON: {potential_json}")
+                    break
+            except json.JSONDecodeError:
+                continue
+
+        # Strategy 2: Look for sentiment value directly in quotes
+        if not sentiment:
+            value_match = re.search(r'"sentiment"\s*:\s*"(positive|negative|neutral)"', llm_response_text, re.IGNORECASE)
+            if value_match:
+                sentiment = value_match.group(1).lower()
+                logger.info(f"✓ Extracted sentiment from pattern: {sentiment}")
+
+        # Strategy 3: Look for just the sentiment words
+        if not sentiment:
+            word_match = re.search(r'\b(positive|negative|neutral)\b', llm_response_text, re.IGNORECASE)
+            if word_match:
+                sentiment = word_match.group(1).lower()
+                logger.info(f"✓ Extracted sentiment word: {sentiment}")
+
+        if sentiment and sentiment in ["positive", "negative", "neutral"]:
+            return sentiment, "Model: Llama 2 7B"
+        else:
+            raise ValueError(f"Invalid or missing sentiment value: {sentiment}")
+
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
+        logger.error(f"✗ PARSING FAILED: {type(e).__name__}: {e}")
+        return "neutral", "Failed to parse LLM response, defaulted to neutral"
+    except Exception as e:
+        logger.error(f"✗ PARSING FAILED: {type(e).__name__}: {e}")
+        return "neutral", f"Failed to parse LLM response (error: {str(e)}), defaulted to neutral"
+
 # ---------------------------
 # Sentiment Analysis Functions
 # ---------------------------
@@ -287,9 +460,10 @@ def analyze_overall_sentiment(file_path: str, model_name: str = "roberta") -> Di
     return output
 
 def analyze_contextual_sentiment(file_path: str, context: str) -> Dict[str, Any]:
-    """Analyze contextual sentiment using Llama 2 model combined with rule-based detection."""
+    """Analyze contextual sentiment using LLM (Llama 2 or OpenAI) combined with rule-based detection."""
     logger.info(f"Starting contextual sentiment analysis for context: {context}...")
-    
+    logger.info(f"Using sentiment model: {SENTIMENT_MODEL}")
+
     # Validate the input file against the transcript schema
     schema_path = os.path.join(BASE_DIR, "transcript-schema.json")
     data = load_file(file_path)
@@ -336,25 +510,33 @@ def analyze_contextual_sentiment(file_path: str, context: str) -> Dict[str, Any]
             "segments": []
         }
     
-    # Download and load the LLM model
-    logger.info("Loading Llama model for contextual analysis...")
-    model_path = download_llm_model()
-    
-    # Suppress llama_cpp logs and prints
-    logging.getLogger("llama_cpp").setLevel(logging.CRITICAL)
-    
-    class DevNull:
-        def write(self, msg): pass
-        def flush(self): pass
-    
-    # Load the LLM model
+    # Load the LLM model (only for Llama, not needed for OpenAI)
     llm = None
-    try:
-        _stdout, _stderr = sys.stdout, sys.stderr
-        sys.stdout = sys.stderr = DevNull()
-        llm = Llama(model_path=str(model_path), n_ctx=1024)
-    finally:
-        sys.stdout, sys.stderr = _stdout, _stderr
+    if SENTIMENT_MODEL == "llama":
+        logger.info("Loading Llama model for contextual analysis...")
+        model_path = download_llm_model()
+
+        # Suppress llama_cpp logs and prints
+        logging.getLogger("llama_cpp").setLevel(logging.CRITICAL)
+
+        class DevNull:
+            def write(self, msg): pass
+            def flush(self): pass
+
+        try:
+            _stdout, _stderr = sys.stdout, sys.stderr
+            sys.stdout = sys.stderr = DevNull()
+            llm = Llama(model_path=str(model_path), n_ctx=1024)
+        finally:
+            sys.stdout, sys.stderr = _stdout, _stderr
+    elif SENTIMENT_MODEL == "openai":
+        logger.info("Using OpenAI API for contextual analysis...")
+        if not OPENAI_API_KEY:
+            logger.error("OPENAI_API_KEY environment variable not set")
+            sys.exit(1)
+    else:
+        logger.error(f"Invalid SENTIMENT_MODEL: {SENTIMENT_MODEL}. Must be 'llama' or 'openai'")
+        sys.exit(1)
     
     # Process each segment containing the context
     pos = neg = neutral = 0
@@ -405,109 +587,23 @@ def analyze_contextual_sentiment(file_path: str, context: str) -> Dict[str, Any]
                 logger.info(f"Saved segment to LLM fallback log: {LLM_FALLBACK_LOG}")
             except Exception as e:
                 logger.warning(f"Failed to save segment to fallback log: {e}")
-            # No strong indicators, use simplified LLM prompt with better parameters
-            prompt = f"""Analyze sentiment about "{context}" in this text: "{segment_text}"
 
-Rules:
-- Only sentiment about "{context}" matters
-- Handle negation (e.g., "not good" = negative)
-- Questions, factual statements, introductions, and identification statements = neutral
-- Factual examples: "calling from {context}", "this is {context}", "speaking from {context}", "representative from {context}" = neutral
-- Only emotional or evaluative statements about {context} can be positive or negative
-- If there is no emotional opinion expressed about {context}, classify as neutral
-- Mixed sentiment = use the stronger one
+            # Use LLM for sentiment analysis
+            if SENTIMENT_MODEL == "openai":
+                sentiment, detection_details = analyze_sentiment_with_openai(segment_text, context)
+                detection_method = "llm-based-openai"
+            else:  # llama
+                sentiment, detection_details = analyze_sentiment_with_llama(segment_text, context, llm)
+                detection_method = "llm-based-llama"
 
-Respond ONLY with valid JSON in this exact format:
-{{"sentiment": "positive"}} OR {{"sentiment": "negative"}} OR {{"sentiment": "neutral"}}
-
-JSON response:"""
-
-            try:
-                _stdout, _stderr = sys.stdout, sys.stderr
-                sys.stdout = sys.stderr = DevNull()
-                # Use more controlled generation parameters for better JSON output
-                response = llm(
-                    prompt,
-                    max_tokens=120,  # Allow enough space for response
-                    temperature=0.1,  # Low temperature for more deterministic output
-                    top_p=0.9,
-                    stop=["\n\n", "Explanation:", "Note:"],  # Stop at common explanation markers
-                    repeat_penalty=1.1
-                )
-            finally:
-                sys.stdout, sys.stderr = _stdout, _stderr
-
-            # Parse JSON response with improved extraction
-            try:
-                llm_response_text = response['choices'][0]['text'].strip()
-
-                # Enhanced logging - clearly show segment analysis
-                logger.info("="*80)
-                logger.info(f"SEGMENT {segment.get('id')} LLM ANALYSIS")
-                logger.info(f"Context: {context}")
-                logger.info(f"Segment Text: {segment_text}")
-                logger.info(f"Raw LLM Response: {llm_response_text}")
-                logger.info(f"Response Length: {len(llm_response_text)} characters")
-                logger.info("="*80)
-
-                # Multiple extraction strategies for robustness
-                sentiment = None
-
-                # Strategy 1: Try to find ANY JSON object with sentiment key
-                json_matches = re.finditer(r'\{[^}]*\}', llm_response_text)
-                for match in json_matches:
-                    try:
-                        potential_json = match.group(0)
-                        parsed = json.loads(potential_json)
-                        if "sentiment" in parsed:
-                            sentiment = parsed["sentiment"].lower()
-                            logger.info(f"✓ Extracted JSON: {potential_json}")
-                            break
-                    except json.JSONDecodeError:
-                        continue
-
-                # Strategy 2: Look for sentiment value directly in quotes
-                if not sentiment:
-                    value_match = re.search(r'"sentiment"\s*:\s*"(positive|negative|neutral)"', llm_response_text, re.IGNORECASE)
-                    if value_match:
-                        sentiment = value_match.group(1).lower()
-                        logger.info(f"✓ Extracted sentiment from pattern: {sentiment}")
-
-                # Strategy 3: Look for just the sentiment words
-                if not sentiment:
-                    word_match = re.search(r'\b(positive|negative|neutral)\b', llm_response_text, re.IGNORECASE)
-                    if word_match:
-                        sentiment = word_match.group(1).lower()
-                        logger.info(f"✓ Extracted sentiment word: {sentiment}")
-
-                # Validate and set sentiment
-                if sentiment and sentiment in ["positive", "negative", "neutral"]:
-                    detection_method = "llm-based"
-                    detection_details = f"Model: Llama 2 7B"
-                    logger.info(f"✓ Successfully parsed sentiment: {sentiment}")
-                else:
-                    raise ValueError(f"Invalid or missing sentiment value: {sentiment}")
-
-            except (json.JSONDecodeError, ValueError, KeyError) as e:
-                logger.error("="*80)
-                logger.error(f"✗ PARSING FAILED - Segment {segment.get('id')}")
-                logger.error(f"Error: {type(e).__name__}: {e}")
-                logger.error(f"Failed Response: {llm_response_text}")
-                logger.error(f"Response Type: {type(llm_response_text)}")
-                logger.error(f"First 200 chars: {llm_response_text[:200] if len(llm_response_text) > 200 else llm_response_text}")
-                logger.error("="*80)
-                sentiment = "neutral"
-                detection_method = "llm-based"
-                detection_details = f"Failed to parse LLM response, defaulted to neutral"
-            except Exception as e:
-                logger.error("="*80)
-                logger.error(f"✗ PARSING FAILED - Segment {segment.get('id')}")
-                logger.error(f"Unexpected Error: {type(e).__name__}: {e}")
-                logger.error(f"Failed Response: {response['choices'][0]['text'].strip() if 'choices' in response and len(response['choices']) > 0 else 'No response'}")
-                logger.error("="*80)
-                sentiment = "neutral"
-                detection_method = "llm-based"
-                detection_details = f"Failed to parse LLM response (error: {str(e)}), defaulted to neutral"
+            # Log the LLM analysis result
+            logger.info("="*80)
+            logger.info(f"SEGMENT {segment.get('id')} LLM ANALYSIS")
+            logger.info(f"Context: {context}")
+            logger.info(f"Segment Text: {segment_text}")
+            logger.info(f"✓ Detected Sentiment: {sentiment}")
+            logger.info(f"✓ Detection Details: {detection_details}")
+            logger.info("="*80)
 
         # Update counters
         if sentiment == "positive":
