@@ -54,8 +54,14 @@
 
       positivePatterns = posData.patterns || [];
       negativePatterns = negData.patterns || [];
+
+      console.log('Loaded patterns:', {
+        positive: positivePatterns.length,
+        negative: negativePatterns.length
+      });
     } catch (e) {
-      error = e.message;
+      error = `Failed to load patterns: ${e.message}. Make sure the sentiment service is running and CORS is enabled.`;
+      console.error('Error loading patterns:', e);
     } finally {
       loading = false;
     }
@@ -348,25 +354,35 @@
 
         <!-- Pattern List -->
         <div class="pattern-list">
-          {#each filteredPositive as pattern}
-            <div class="pattern-item positive-pattern" class:selected={selectedPositive.has(pattern)}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={selectedPositive.has(pattern)}
-                  on:change={() => togglePositiveSelection(pattern)}
-                />
-                <span class="pattern-text">{pattern}</span>
-              </label>
-              <button
-                on:click={() => handleDeletePositive(pattern)}
-                class="delete-btn"
-                aria-label="Delete pattern"
-              >
-                ×
-              </button>
+          {#if filteredPositive.length === 0}
+            <div class="empty-state">
+              {#if positiveSearchTerm}
+                <p>No patterns match your search.</p>
+              {:else}
+                <p>No positive patterns yet. Add some patterns above to get started!</p>
+              {/if}
             </div>
-          {/each}
+          {:else}
+            {#each filteredPositive as pattern}
+              <div class="pattern-item positive-pattern" class:selected={selectedPositive.has(pattern)}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={selectedPositive.has(pattern)}
+                    on:change={() => togglePositiveSelection(pattern)}
+                  />
+                  <span class="pattern-text">{pattern}</span>
+                </label>
+                <button
+                  on:click={() => handleDeletePositive(pattern)}
+                  class="delete-btn"
+                  aria-label="Delete pattern"
+                >
+                  ×
+                </button>
+              </div>
+            {/each}
+          {/if}
         </div>
       </article>
 
@@ -434,25 +450,35 @@
 
         <!-- Pattern List -->
         <div class="pattern-list">
-          {#each filteredNegative as pattern}
-            <div class="pattern-item negative-pattern" class:selected={selectedNegative.has(pattern)}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={selectedNegative.has(pattern)}
-                  on:change={() => toggleNegativeSelection(pattern)}
-                />
-                <span class="pattern-text">{pattern}</span>
-              </label>
-              <button
-                on:click={() => handleDeleteNegative(pattern)}
-                class="delete-btn"
-                aria-label="Delete pattern"
-              >
-                ×
-              </button>
+          {#if filteredNegative.length === 0}
+            <div class="empty-state">
+              {#if negativeSearchTerm}
+                <p>No patterns match your search.</p>
+              {:else}
+                <p>No negative patterns yet. Add some patterns above to get started!</p>
+              {/if}
             </div>
-          {/each}
+          {:else}
+            {#each filteredNegative as pattern}
+              <div class="pattern-item negative-pattern" class:selected={selectedNegative.has(pattern)}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={selectedNegative.has(pattern)}
+                    on:change={() => toggleNegativeSelection(pattern)}
+                  />
+                  <span class="pattern-text">{pattern}</span>
+                </label>
+                <button
+                  on:click={() => handleDeleteNegative(pattern)}
+                  class="delete-btn"
+                  aria-label="Delete pattern"
+                >
+                  ×
+                </button>
+              </div>
+            {/each}
+          {/if}
         </div>
       </article>
     </div>
@@ -620,5 +646,16 @@
   .delete-btn:hover {
     background-color: var(--del-color);
     color: white;
+  }
+
+  .empty-state {
+    padding: 2rem;
+    text-align: center;
+    color: var(--muted-color);
+  }
+
+  .empty-state p {
+    margin: 0;
+    font-style: italic;
   }
 </style>
