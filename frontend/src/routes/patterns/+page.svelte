@@ -261,8 +261,8 @@
     return negativePatterns.filter(p => p.toLowerCase().includes(term));
   }
 
-  $: filteredPositive = getFilteredPositive();
-  $: filteredNegative = getFilteredNegative();
+  $: filteredPositive = positiveSearchTerm, positivePatterns, getFilteredPositive();
+  $: filteredNegative = negativeSearchTerm, negativePatterns, getFilteredNegative();
 </script>
 
 <svelte:head>
