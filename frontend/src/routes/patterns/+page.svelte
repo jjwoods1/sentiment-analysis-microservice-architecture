@@ -230,13 +230,11 @@
   }
 
   function selectAllPositive() {
-    const filtered = getFilteredPositive();
-    selectedPositive = new Set(filtered);
+    selectedPositive = new Set(filteredPositive);
   }
 
   function selectAllNegative() {
-    const filtered = getFilteredNegative();
-    selectedNegative = new Set(filtered);
+    selectedNegative = new Set(filteredNegative);
   }
 
   function deselectAllPositive() {
@@ -249,20 +247,14 @@
     selectedNegative = selectedNegative;
   }
 
-  function getFilteredPositive() {
-    if (!positiveSearchTerm.trim()) return positivePatterns;
-    const term = positiveSearchTerm.toLowerCase();
-    return positivePatterns.filter(p => p.toLowerCase().includes(term));
-  }
+  // Reactive filtered lists - will update when patterns or search terms change
+  $: filteredPositive = positiveSearchTerm.trim()
+    ? positivePatterns.filter(p => p.toLowerCase().includes(positiveSearchTerm.toLowerCase()))
+    : positivePatterns;
 
-  function getFilteredNegative() {
-    if (!negativeSearchTerm.trim()) return negativePatterns;
-    const term = negativeSearchTerm.toLowerCase();
-    return negativePatterns.filter(p => p.toLowerCase().includes(term));
-  }
-
-  $: filteredPositive = positiveSearchTerm, positivePatterns, getFilteredPositive();
-  $: filteredNegative = negativeSearchTerm, negativePatterns, getFilteredNegative();
+  $: filteredNegative = negativeSearchTerm.trim()
+    ? negativePatterns.filter(p => p.toLowerCase().includes(negativeSearchTerm.toLowerCase()))
+    : negativePatterns;
 </script>
 
 <svelte:head>
