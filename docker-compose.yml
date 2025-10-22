@@ -343,6 +343,28 @@ services:
       - audio-network
     # Volume mounts removed for production - build directory is in the image
 
+  frontend-php:
+    build:
+      context: ./frontend-php
+      dockerfile: Dockerfile
+    container_name: audio-frontend-php
+    environment:
+      API_URL: http://orchestrator-api:8000
+      SENTIMENT_API_URL: http://sentiment-api:8008
+      APP_ENV: production
+    ports:
+      - "3210:80"
+    depends_on:
+      - orchestrator-api
+      - sentiment-api
+    networks:
+      - audio-network
+    volumes:
+      - ./frontend-php/public:/var/www/html/public
+      - ./frontend-php/src:/var/www/html/src
+      - ./frontend-php/config:/var/www/html/config
+    restart: unless-stopped
+
 networks:
   audio-network:
     driver: bridge
