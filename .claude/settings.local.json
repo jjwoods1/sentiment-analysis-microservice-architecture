@@ -21,7 +21,8 @@
       "Bash(findstr:*)",
       "Bash(git rm:*)",
       "Bash(del sentiment-analysis-tool-V1neutral_patterns.txt)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []
