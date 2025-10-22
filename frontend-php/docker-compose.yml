@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  frontend-php:
+    build: .
+    container_name: sentiment-frontend-php
+    ports:
+      - "3210:80"
+    environment:
+      - API_URL=http://10.1.0.35:8100
+      - SENTIMENT_API_URL=http://10.1.0.35:8008
+      - APP_ENV=production
+    volumes:
+      - ./public:/var/www/html/public
+      - ./src:/var/www/html/src
+      - ./config:/var/www/html/config
+    networks:
+      - sentiment-network
+    restart: unless-stopped
+
+networks:
+  sentiment-network:
+    external: true
