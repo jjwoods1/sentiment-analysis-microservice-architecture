@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Enum, Text, ARRAY
+from sqlalchemy import Column, String, DateTime, ForeignKey, Enum, Text, ARRAY, Boolean, Integer, Float
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -12,6 +12,12 @@ class JobStatus(str, enum.Enum):
     PROCESSING = "PROCESSING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+
+
+class SentimentType(str, enum.Enum):
+    POSITIVE = "positive"
+    NEGATIVE = "negative"
+    NEUTRAL = "neutral"
 
 
 class Job(Base):
@@ -74,3 +80,51 @@ class SentimentResult(Base):
 
     # Relationships
     job = relationship("Job", back_populates="sentiment_results")
+    pattern_matches = relationship("PatternMatch", back_populates="sentiment_result", cascade="all, delete-orphan")
+
+
+class Pattern(Base):
+    __tablename__ = "patterns"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    pattern_text = Column(String, nullable=False, unique=True, index=True)
+    sentiment_type = Column(Enum(SentimentType), nullable=False, index=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    match_count = Column(Integer, default=0, nullable=False)  # Cached count for performance
+
+    # Metadata
+    added_by = Column(String, nullable=True)  # Optional: track who added it
+    notes = Column(Text, nullable=True)  # Optional: notes about the pattern
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_matched_at = Column(DateTime, nullable=True)  # When it was last matched
+
+    # Relationships
+    pattern_matches = relationship("PatternMatch", back_populates="pattern", cascade="all, delete-orphan")
+
+
+class PatternMatch(Base):
+    __tablename__ = "pattern_matches"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    pattern_id = Column(UUID(as_uuid=True), ForeignKey("patterns.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    sentiment_result_id = Column(UUID(as_uuid=True), ForeignKey("sentiment_results.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Match details
+    matched_text = Column(Text, nullable=False)  # The actual text that matched the pattern
+    competitor_name = Column(String, nullable=False, index=True)  # Denormalized for easier querying
+
+    # Audio segment information
+    segment_start_time = Column(Float, nullable=True)  # Start time in seconds
+    segment_end_time = Column(Float, nullable=True)  # End time in seconds
+
+    # Timestamp
+    detected_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    # Relationships
+    pattern = relationship("Pattern", back_populates="pattern_matches")
+    job = relationship("Job")
+    sentiment_result = relationship("SentimentResult", back_populates="pattern_matches")

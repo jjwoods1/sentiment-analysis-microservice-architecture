@@ -15,6 +15,7 @@ from .config import settings
 from .dependencies import verify_api_key
 from .tasks import process_audio_pipeline
 from .celery_app import celery_app
+from .routers import patterns
 
 # Configure structured logging
 logging.basicConfig(
@@ -28,10 +29,13 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Audio Processing Orchestrator API")
 
+# Include routers
+app.include_router(patterns.router)
+
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://localhost:3200", "http://localhost:3000", "http://10.1.0.35:3200"],
+    allow_origins=[settings.FRONTEND_URL, "http://localhost:3200", "http://localhost:3000", "http://10.1.0.35:3200", "http://10.1.0.35:3210"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
