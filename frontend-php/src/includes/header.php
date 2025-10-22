@@ -17,12 +17,22 @@ if (!defined('API_URL')) {
     <style>
         :root {
             --spacing: 1rem;
+            --primary-color: #2196f3;
+            --success-color: #4caf50;
+            --danger-color: #f44336;
+            --warning-color: #ff9800;
+            --info-color: #00bcd4;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: var(--spacing);
+        }
+
+        nav {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
 
         nav ul {
@@ -30,14 +40,26 @@ if (!defined('API_URL')) {
             padding: 0;
             display: flex;
             gap: 1rem;
+            align-items: center;
         }
 
         nav a {
             text-decoration: none;
+            color: white;
+            font-weight: 500;
+            transition: all 0.2s;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
         }
 
         nav a:hover {
-            text-decoration: underline;
+            background: rgba(255,255,255,0.2);
+            text-decoration: none;
+        }
+
+        nav strong {
+            color: white;
+            font-size: 1.2rem;
         }
 
         .status-badge {
@@ -174,10 +196,29 @@ if (!defined('API_URL')) {
         }
 
         .card {
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 1rem;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 1.5rem;
             background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+
+        .card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        h1, h2, h3 {
+            color: #333;
+        }
+
+        h1 {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1.5rem;
         }
 
         .pattern-list {
