@@ -16,7 +16,12 @@
       "Bash(docker:*)",
       "Bash(docker-compose:*)",
       "Bash(curl:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(git rm:*)",
+      "Bash(del sentiment-analysis-tool-V1neutral_patterns.txt)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []

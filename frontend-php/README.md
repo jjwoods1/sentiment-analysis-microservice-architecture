@@ -44,9 +44,29 @@ frontend-php/
 
 Environment variables can be set in `docker-compose.yml`:
 
-- `API_URL`: Orchestrator API endpoint (default: `http://10.1.0.35:8100`)
-- `SENTIMENT_API_URL`: Sentiment analysis API endpoint (default: `http://10.1.0.35:8008`)
+- `API_URL`: Orchestrator API endpoint
+  - When running in Docker: `http://orchestrator-api:8000` (internal Docker network)
+  - When running standalone: `http://10.1.0.35:8100` (external access)
+- `SENTIMENT_API_URL`: Sentiment analysis API endpoint
+  - When running in Docker: `http://sentiment-api:8008` (internal Docker network)
+  - When running standalone: `http://10.1.0.35:8008` (external access)
 - `APP_ENV`: Application environment (`production` or `development`)
+
+### API Connectivity
+
+The PHP frontend connects to the backend services via the Docker internal network when running as part of the docker-compose stack. This provides:
+
+- **Better Performance**: Internal network communication is faster
+- **Security**: APIs don't need to be exposed externally
+- **Reliability**: No dependency on external network configuration
+
+The frontend accesses the same database and APIs as the Svelte frontend:
+- **Database**: PostgreSQL via Orchestrator API
+- **Jobs Data**: `/jobs` endpoints from Orchestrator
+- **Analytics**: `/analytics/*` endpoints from Orchestrator
+- **Sentiment Patterns**: `/patterns/*` endpoints from Sentiment API
+- **Admin Data**: `/admin/*` endpoints from Orchestrator
+- **File Storage**: MinIO via Storage API through Orchestrator
 
 ## Installation
 
@@ -68,6 +88,12 @@ docker-compose up -d --build
 5. Ensure Apache has write permissions to the application directory
 
 ## Usage
+
+### API Connectivity Test (`/test-api.php`)
+- **NEW**: Test page to verify API connectivity
+- Shows connection status to all backend endpoints
+- Displays response times and sample data
+- Useful for debugging and verifying the setup
 
 ### Home Page (`/index.php`)
 - Upload audio files for processing

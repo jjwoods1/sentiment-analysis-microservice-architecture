@@ -244,6 +244,7 @@ if (!defined('API_URL')) {
             <li><a href="/analytics.php">Analytics</a></li>
             <li><a href="/patterns.php">Patterns</a></li>
             <li><a href="/admin.php">Admin</a></li>
+            <li><a href="/test-api.php" style="color: #888;">Test API</a></li>
         </ul>
     </nav>
 
