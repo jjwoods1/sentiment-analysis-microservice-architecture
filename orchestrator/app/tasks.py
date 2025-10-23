@@ -440,6 +440,9 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
                     try:
                         from .models import PatternMatch, Pattern
 
+                        # Get the sentiment_result ID before it goes out of scope
+                        sentiment_result_id = sentiment_result.id
+
                         # Convert start/end times to float (they're stored as strings)
                         start_float = None
                         end_float = None
@@ -453,7 +456,7 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
                         pattern_match = PatternMatch(
                             pattern_id=UUID(segment.get('pattern_id')),
                             job_id=UUID(job_id),
-                            sentiment_result_id=sentiment_result.id,
+                            sentiment_result_id=sentiment_result_id,
                             matched_text=segment.get('matched_pattern', ''),
                             competitor_name=competitor_name,
                             segment_start_time=start_float,
@@ -468,6 +471,7 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
                             pattern.last_matched_at = datetime.utcnow()
 
                         db.commit()
+                        db.expunge_all()  # Detach all objects from session to prevent serialization issues
                         print(f"[DEBUG] Recorded pattern match for '{segment.get('matched_pattern')}' in segment {segment.get('segment-id')}")
                     except Exception as pattern_error:
                         print(f"[ERROR] Failed to record pattern match for segment {segment.get('segment-id')}: {str(pattern_error)}")
