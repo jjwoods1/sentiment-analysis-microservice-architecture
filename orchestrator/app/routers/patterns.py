@@ -48,6 +48,16 @@ class PatternResponse(BaseModel):
         from_attributes = True
 
 
+class PatternMatchCreate(BaseModel):
+    pattern_id: uuid.UUID
+    job_id: uuid.UUID
+    sentiment_result_id: uuid.UUID
+    matched_text: str
+    competitor_name: str
+    segment_start_time: Optional[float] = None
+    segment_end_time: Optional[float] = None
+
+
 class PatternMatchResponse(BaseModel):
     id: uuid.UUID
     pattern_id: uuid.UUID
@@ -248,6 +258,49 @@ def delete_pattern_by_text(
 
 
 # Pattern Match Endpoints
+
+@router.post("/matches", response_model=PatternMatchResponse, status_code=201)
+def create_pattern_match(
+    match_data: PatternMatchCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Record a pattern match occurrence.
+
+    This endpoint is called when a sentiment pattern is detected in a transcript segment.
+    It tracks:
+    - Which pattern was matched
+    - What job/transcript it appeared in
+    - The exact text that matched
+    - Which competitor was mentioned
+    - Timestamp and segment timing
+    """
+    # Verify pattern exists
+    pattern = db.query(Pattern).filter(Pattern.id == match_data.pattern_id).first()
+    if not pattern:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+
+    # Create the pattern match record
+    new_match = PatternMatch(
+        pattern_id=match_data.pattern_id,
+        job_id=match_data.job_id,
+        sentiment_result_id=match_data.sentiment_result_id,
+        matched_text=match_data.matched_text,
+        competitor_name=match_data.competitor_name,
+        segment_start_time=match_data.segment_start_time,
+        segment_end_time=match_data.segment_end_time
+    )
+    db.add(new_match)
+
+    # Update pattern's match count and last matched timestamp
+    pattern.match_count += 1
+    pattern.last_matched_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(new_match)
+
+    return new_match
+
 
 @router.get("/{pattern_id}/matches", response_model=List[PatternMatchResponse])
 def get_pattern_matches(

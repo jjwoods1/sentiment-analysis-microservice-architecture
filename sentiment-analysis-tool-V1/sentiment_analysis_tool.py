@@ -16,8 +16,10 @@ import json
 import argparse
 import re
 from pathlib import Path
-from typing import Dict, List, Any, Union, Optional
+from typing import Dict, List, Any, Union, Optional, Tuple
 import logging
+import requests
+from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(
@@ -28,6 +30,7 @@ logger = logging.getLogger("sentiment_analysis")
 
 # Constants
 BASE_DIR = Path(__file__).parent.resolve()
+ORCHESTRATOR_API_URL = os.getenv("ORCHESTRATOR_API_URL", "http://orchestrator-api:8000")
 LLM_DIR = BASE_DIR / ".models" / "llm"
 LLM_MODEL_NAME = "llama-2-7b.Q4_K_M.gguf"
 LLM_URL = "https://huggingface.co/TheBloke/Llama-2-7B-GGUF/resolve/main/llama-2-7b.Q4_K_M.gguf"
@@ -90,9 +93,75 @@ def download_llm_model() -> Path:
                 
     return model_path
 
+# Pattern cache to avoid hitting API on every call
+_pattern_cache = {
+    'positive': {'patterns': [], 'patterns_dict': {}, 'last_updated': None},
+    'negative': {'patterns': [], 'patterns_dict': {}, 'last_updated': None}
+}
+_CACHE_DURATION = timedelta(minutes=5)  # Refresh cache every 5 minutes
+
+
+def load_patterns_from_api(sentiment_type: str) -> Tuple[List[str], Dict[str, str]]:
+    """
+    Load sentiment patterns from the orchestrator API database.
+    Uses caching to avoid excessive API calls.
+
+    Args:
+        sentiment_type: "positive" or "negative"
+
+    Returns:
+        Tuple of (patterns_list, patterns_dict) where patterns_dict maps pattern_text to pattern_id
+    """
+    global _pattern_cache
+
+    # Check cache
+    cache_entry = _pattern_cache.get(sentiment_type)
+    if cache_entry and cache_entry['last_updated']:
+        if datetime.now() - cache_entry['last_updated'] < _CACHE_DURATION:
+            logger.debug(f"Using cached {sentiment_type} patterns")
+            return cache_entry['patterns'], cache_entry['patterns_dict']
+
+    # Fetch from API
+    try:
+        url = f"{ORCHESTRATOR_API_URL}/patterns/?sentiment_type={sentiment_type}&is_active=true&limit=10000"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+        patterns = []
+        patterns_dict = {}
+
+        for pattern_obj in data:
+            pattern_text = pattern_obj['pattern_text'].lower()
+            pattern_id = pattern_obj['id']
+            patterns.append(pattern_text)
+            patterns_dict[pattern_text] = pattern_id
+
+        # Update cache
+        _pattern_cache[sentiment_type] = {
+            'patterns': patterns,
+            'patterns_dict': patterns_dict,
+            'last_updated': datetime.now()
+        }
+
+        logger.info(f"Loaded {len(patterns)} {sentiment_type} patterns from database")
+        return patterns, patterns_dict
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error loading patterns from API: {e}")
+        logger.warning(f"Falling back to file-based patterns for {sentiment_type}")
+
+        # Fallback to file-based patterns
+        file_path = POSITIVE_PATTERNS_FILE if sentiment_type == "positive" else NEGATIVE_PATTERNS_FILE
+        patterns = load_patterns_from_file(file_path)
+        patterns_dict = {}  # No IDs available from files
+
+        return patterns, patterns_dict
+
+
 def load_patterns_from_file(file_path: Path) -> List[str]:
     """
-    Load sentiment patterns from a text file.
+    Load sentiment patterns from a text file (fallback method).
 
     Args:
         file_path: Path to the patterns file
@@ -117,7 +186,7 @@ def load_patterns_from_file(file_path: Path) -> List[str]:
 
     return patterns
 
-def detect_sentiment_keywords(text: str, context: str) -> tuple[Optional[str], Optional[str]]:
+def detect_sentiment_keywords(text: str, context: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Use rule-based detection for strong sentiment indicators.
 
@@ -126,8 +195,10 @@ def detect_sentiment_keywords(text: str, context: str) -> tuple[Optional[str], O
         context: The context word to focus on
 
     Returns:
-        Tuple of (sentiment, matched_pattern) where sentiment is "positive", "negative", "neutral", or None
-        and matched_pattern is the pattern that was matched, or None
+        Tuple of (sentiment, matched_pattern, pattern_id) where:
+        - sentiment is "positive", "negative", "neutral", or None
+        - matched_pattern is the pattern text that was matched, or None
+        - pattern_id is the database ID of the matched pattern, or None
     """
     text_lower = text.lower()
     context_lower = context.lower()
@@ -139,24 +210,26 @@ def detect_sentiment_keywords(text: str, context: str) -> tuple[Optional[str], O
         re.IGNORECASE
     )
     if context_pattern.search(text):
-        # Load patterns from files
-        negative_patterns = load_patterns_from_file(NEGATIVE_PATTERNS_FILE)
-        positive_patterns = load_patterns_from_file(POSITIVE_PATTERNS_FILE)
+        # Load patterns from database API (with fallback to files)
+        negative_patterns, neg_dict = load_patterns_from_api("negative")
+        positive_patterns, pos_dict = load_patterns_from_api("positive")
 
         # Check for negative sentiment patterns
         for pattern in negative_patterns:
             if pattern in text_lower:
-                logger.info(f"Rule-based detection found negative pattern '{pattern}' in text")
-                return "negative", pattern
+                pattern_id = neg_dict.get(pattern)
+                logger.info(f"Rule-based detection found negative pattern '{pattern}' (ID: {pattern_id}) in text")
+                return "negative", pattern, pattern_id
 
         # Check for positive sentiment patterns
         for pattern in positive_patterns:
             if pattern in text_lower:
-                logger.info(f"Rule-based detection found positive pattern '{pattern}' in text")
-                return "positive", pattern
+                pattern_id = pos_dict.get(pattern)
+                logger.info(f"Rule-based detection found positive pattern '{pattern}' (ID: {pattern_id}) in text")
+                return "positive", pattern, pattern_id
 
     # No strong sentiment found
-    return None, None
+    return None, None, None
 
 def validate_json_against_schema(json_data: Dict[str, Any], schema_file: str) -> bool:
     """Validate a JSON object against a schema."""
@@ -546,7 +619,7 @@ def analyze_contextual_sentiment(file_path: str, context: str) -> Dict[str, Any]
         segment_text = segment.get("text", "")
 
         # First check for strong sentiment indicators with rule-based approach
-        rule_sentiment, matched_pattern = detect_sentiment_keywords(segment_text, context)
+        rule_sentiment, matched_pattern, pattern_id = detect_sentiment_keywords(segment_text, context)
 
         detection_method = None
         detection_details = None
@@ -562,7 +635,7 @@ def analyze_contextual_sentiment(file_path: str, context: str) -> Dict[str, Any]
             logger.info(f"SEGMENT {segment.get('id')} RULE-BASED DETECTION")
             logger.info(f"Context: {context}")
             logger.info(f"Segment Text: {segment_text}")
-            logger.info(f"✓ Matched Pattern: '{matched_pattern}'")
+            logger.info(f"✓ Matched Pattern: '{matched_pattern}' (ID: {pattern_id})")
             logger.info(f"✓ Detected Sentiment: {sentiment}")
             logger.info("="*80)
         else:
@@ -614,7 +687,7 @@ def analyze_contextual_sentiment(file_path: str, context: str) -> Dict[str, Any]
             neutral += 1
 
         # Add segment to results with start and end times
-        result_segments.append({
+        segment_result = {
             "segment-id": segment.get("id"),
             "start": segment.get("start"),
             "end": segment.get("end"),
@@ -622,7 +695,14 @@ def analyze_contextual_sentiment(file_path: str, context: str) -> Dict[str, Any]
             "sentiment": sentiment,
             "detection_method": detection_method,
             "detection_details": detection_details
-        })
+        }
+
+        # Add pattern tracking info if available
+        if pattern_id and matched_pattern:
+            segment_result["pattern_id"] = pattern_id
+            segment_result["matched_pattern"] = matched_pattern
+
+        result_segments.append(segment_result)
     
     # Determine overall sentiment
     if pos > neg and pos > neutral:

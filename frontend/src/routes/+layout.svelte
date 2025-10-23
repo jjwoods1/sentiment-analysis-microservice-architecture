@@ -12,6 +12,7 @@
         <li><a href="/">Home</a></li>
         <li><a href="/analytics">Analytics</a></li>
         <li><a href="/patterns">Patterns</a></li>
+        <li><a href="/pattern-analytics">Pattern Analytics</a></li>
         <li><a href="/admin">Admin</a></li>
       </ul>
     </nav>

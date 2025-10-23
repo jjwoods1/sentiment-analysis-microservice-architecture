@@ -420,7 +420,7 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
 
         for segment in segments:
             try:
-                crud.create_sentiment_result_segment(
+                sentiment_result = crud.create_sentiment_result_segment(
                     db,
                     job_id=UUID(job_id),
                     competitor_name=competitor_name,
@@ -434,6 +434,46 @@ def analyze_sentiment_for_competitor(self, previous_result, competitor_name: str
                     context=context,
                     metadata_json=metadata
                 )
+
+                # If this segment has a pattern match, record it
+                if segment.get('pattern_id') and segment.get('matched_pattern'):
+                    try:
+                        from .models import PatternMatch, Pattern
+
+                        # Convert start/end times to float (they're stored as strings)
+                        start_float = None
+                        end_float = None
+                        try:
+                            start_float = float(segment.get('start', 0))
+                            end_float = float(segment.get('end', 0))
+                        except (ValueError, TypeError):
+                            pass
+
+                        # Create pattern match record
+                        pattern_match = PatternMatch(
+                            pattern_id=UUID(segment.get('pattern_id')),
+                            job_id=UUID(job_id),
+                            sentiment_result_id=sentiment_result.id,
+                            matched_text=segment.get('matched_pattern', ''),
+                            competitor_name=competitor_name,
+                            segment_start_time=start_float,
+                            segment_end_time=end_float
+                        )
+                        db.add(pattern_match)
+
+                        # Update pattern match count and last matched time
+                        pattern = db.query(Pattern).filter(Pattern.id == UUID(segment.get('pattern_id'))).first()
+                        if pattern:
+                            pattern.match_count += 1
+                            pattern.last_matched_at = datetime.utcnow()
+
+                        db.commit()
+                        print(f"[DEBUG] Recorded pattern match for '{segment.get('matched_pattern')}' in segment {segment.get('segment-id')}")
+                    except Exception as pattern_error:
+                        print(f"[ERROR] Failed to record pattern match for segment {segment.get('segment-id')}: {str(pattern_error)}")
+                        # Don't fail the entire segment save if pattern tracking fails
+                        db.rollback()
+
             except Exception as seg_error:
                 print(f"[ERROR] Failed to save segment {segment.get('segment-id', 'unknown')}: {str(seg_error)}")
                 # Continue saving other segments even if one fails

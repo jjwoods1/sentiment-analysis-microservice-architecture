@@ -107,14 +107,15 @@
       error = '';
 
       // Split by newlines and filter empty lines
-      const patterns = bulkPositiveText.split('\n')
+      const newPatterns = bulkPositiveText.split('\n')
         .map(p => p.trim())
         .filter(p => p && !p.startsWith('#'));
 
-      // Merge with existing patterns
-      const allPatterns = [...new Set([...positivePatterns, ...patterns])];
+      // Create new patterns (bulk endpoint will handle duplicates)
+      await replacePositivePatterns(newPatterns);
 
-      const result = await replacePositivePatterns(allPatterns);
+      // Reload all patterns to get updated list
+      const result = await getPositivePatterns();
       positivePatterns = result.patterns || [];
       bulkPositiveText = '';
     } catch (e) {
@@ -132,14 +133,15 @@
       error = '';
 
       // Split by newlines and filter empty lines
-      const patterns = bulkNegativeText.split('\n')
+      const newPatterns = bulkNegativeText.split('\n')
         .map(p => p.trim())
         .filter(p => p && !p.startsWith('#'));
 
-      // Merge with existing patterns
-      const allPatterns = [...new Set([...negativePatterns, ...patterns])];
+      // Create new patterns (bulk endpoint will handle duplicates)
+      await replaceNegativePatterns(newPatterns);
 
-      const result = await replaceNegativePatterns(allPatterns);
+      // Reload all patterns to get updated list
+      const result = await getNegativePatterns();
       negativePatterns = result.patterns || [];
       bulkNegativeText = '';
     } catch (e) {
@@ -153,7 +155,7 @@
     try {
       error = '';
       await deletePositivePattern(pattern);
-      positivePatterns = positivePatterns.filter(p => p !== pattern);
+      positivePatterns = positivePatterns.filter(p => p.id !== pattern.id);
     } catch (e) {
       error = e.message;
     }
@@ -163,7 +165,7 @@
     try {
       error = '';
       await deleteNegativePattern(pattern);
-      negativePatterns = negativePatterns.filter(p => p !== pattern);
+      negativePatterns = negativePatterns.filter(p => p.id !== pattern.id);
     } catch (e) {
       error = e.message;
     }
@@ -176,10 +178,13 @@
       deletingPositive = true;
       error = '';
 
-      // Remove selected patterns
-      const remainingPatterns = positivePatterns.filter(p => !selectedPositive.has(p));
+      // Delete each selected pattern
+      for (const pattern of selectedPositive) {
+        await deletePositivePattern(pattern);
+      }
 
-      const result = await replacePositivePatterns(remainingPatterns);
+      // Reload patterns
+      const result = await getPositivePatterns();
       positivePatterns = result.patterns || [];
       selectedPositive.clear();
       selectedPositive = selectedPositive; // Trigger reactivity
@@ -197,10 +202,13 @@
       deletingNegative = true;
       error = '';
 
-      // Remove selected patterns
-      const remainingPatterns = negativePatterns.filter(p => !selectedNegative.has(p));
+      // Delete each selected pattern
+      for (const pattern of selectedNegative) {
+        await deleteNegativePattern(pattern);
+      }
 
-      const result = await replaceNegativePatterns(remainingPatterns);
+      // Reload patterns
+      const result = await getNegativePatterns();
       negativePatterns = result.patterns || [];
       selectedNegative.clear();
       selectedNegative = selectedNegative; // Trigger reactivity
@@ -249,11 +257,11 @@
 
   // Reactive filtered lists - will update when patterns or search terms change
   $: filteredPositive = positiveSearchTerm.trim()
-    ? positivePatterns.filter(p => p.toLowerCase().includes(positiveSearchTerm.toLowerCase()))
+    ? positivePatterns.filter(p => p.pattern_text.toLowerCase().includes(positiveSearchTerm.toLowerCase()))
     : positivePatterns;
 
   $: filteredNegative = negativeSearchTerm.trim()
-    ? negativePatterns.filter(p => p.toLowerCase().includes(negativeSearchTerm.toLowerCase()))
+    ? negativePatterns.filter(p => p.pattern_text.toLowerCase().includes(negativeSearchTerm.toLowerCase()))
     : negativePatterns;
 </script>
 
@@ -363,7 +371,12 @@
                     checked={selectedPositive.has(pattern)}
                     on:change={() => togglePositiveSelection(pattern)}
                   />
-                  <span class="pattern-text">{pattern}</span>
+                  <span class="pattern-text">{pattern.pattern_text}</span>
+                  {#if pattern.match_count > 0}
+                    <span class="match-count" title="Number of times this pattern was detected">
+                      {pattern.match_count} matches
+                    </span>
+                  {/if}
                 </label>
                 <button
                   on:click={() => handleDeletePositive(pattern)}
@@ -459,7 +472,12 @@
                     checked={selectedNegative.has(pattern)}
                     on:change={() => toggleNegativeSelection(pattern)}
                   />
-                  <span class="pattern-text">{pattern}</span>
+                  <span class="pattern-text">{pattern.pattern_text}</span>
+                  {#if pattern.match_count > 0}
+                    <span class="match-count" title="Number of times this pattern was detected">
+                      {pattern.match_count} matches
+                    </span>
+                  {/if}
                 </label>
                 <button
                   on:click={() => handleDeleteNegative(pattern)}
@@ -616,6 +634,17 @@
   .pattern-text {
     font-family: monospace;
     font-size: 0.875rem;
+  }
+
+  .match-count {
+    margin-left: 0.5rem;
+    padding: 0.125rem 0.5rem;
+    background-color: var(--primary);
+    color: white;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   .delete-btn {
