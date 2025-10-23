@@ -33,19 +33,24 @@ def import_from_file(file_path, sentiment_type):
                 existing = db.query(Pattern).filter(Pattern.pattern_text == line).first()
 
                 if not existing:
-                    pattern = Pattern(
-                        pattern_text=line,
-                        sentiment_type=sentiment_type,
-                        added_by='file_import',
-                        notes='Imported from text file'
-                    )
-                    db.add(pattern)
-                    added += 1
-                    print(f"✓ Added: {line}")
+                    try:
+                        pattern = Pattern(
+                            pattern_text=line,
+                            sentiment_type=sentiment_type,
+                            added_by='file_import',
+                            notes='Imported from text file'
+                        )
+                        db.add(pattern)
+                        db.commit()  # Commit each pattern individually
+                        added += 1
+                        print(f"✓ Added: {line}")
+                    except Exception as e:
+                        db.rollback()
+                        print(f"⚠ Skipped (error): {line} - {str(e)}")
+                        skipped += 1
                 else:
                     skipped += 1
 
-            db.commit()
             db.close()
 
     except FileNotFoundError:
